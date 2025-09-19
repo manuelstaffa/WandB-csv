@@ -17,10 +17,10 @@ from typing import Optional, List, Dict
 from dataclasses import dataclass
 
 try:
-    import toml
+    import tomlkit
 except ImportError:
-    print("Warning: toml package not found. Config file support disabled.")
-    toml = None
+    print("Warning: tomlkit package not found. Config file support disabled.")
+    tomlkit = None
 
 
 @dataclass

@@ -89,6 +89,10 @@ python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
 # High resolution output
 python main.py --csv-path in/wandb_export.csv --atari-game kangaroo --resolution-dpi 600
 
+# External legend with SVG output
+python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
+    --legend-outside --output-format svg --title "Clean Layout with External Legend"
+
 # SVG output format
 python main.py --csv-path in/wandb_export.csv --atari-game kangaroo --output-format svg
 
@@ -164,6 +168,7 @@ python main.py --csv-path in/data.csv --atari-game kangaroo \
 - `--y-axis-label`: Y-axis label (default: "Episodic Reward")
 - `--title`: Graph title (default: auto-generated)
 - `--show-legend`: Show legend (default: True)
+- `--legend-outside`: Position legend outside the plot area (default: False)
 - `--resolution-dpi`: Output resolution (default: 300)
 - `--output-format`: Output format - png or svg (default: png)
 - `--output-dir`: Output directory (default: "output")

@@ -43,6 +43,7 @@ class GraphConfig:
     y_axis_label: str = "Episodic Reward"  # Y-axis label
     title: str = ""  # Graph title (auto-generated if empty)
     show_legend: bool = True  # Whether to show legend
+    legend_outside: bool = False  # Position legend outside the plot area
     resolution_dpi: int = 300  # Resolution for output image
     output_format: str = "png"  # Output format: png or svg
     output_dir: str = "output"  # Output directory
@@ -63,9 +64,14 @@ class WandBGrapher:
 
     def _load_colors(self) -> List[str]:
         """Load colors from config file or use defaults"""
-        if self.config.config_file and Path(self.config.config_file).exists() and toml:
+        if (
+            self.config.config_file
+            and Path(self.config.config_file).exists()
+            and tomlkit
+        ):
             try:
-                config_data = toml.load(self.config.config_file)
+                with open(self.config.config_file, "r") as f:
+                    config_data = tomlkit.load(f)
                 return config_data.get("colors", self._default_colors())
             except Exception as e:
                 print(
@@ -205,9 +211,9 @@ class WandBGrapher:
 
     def _load_custom_groups(self, run_columns: List[str]) -> Dict[str, List[str]]:
         """Load custom groups from config file"""
-        if not toml:
+        if not tomlkit:
             print(
-                "Error: toml package required for custom grouping. Install with: pip install toml"
+                "Error: tomlkit package required for custom grouping. Install with: pip install tomlkit"
             )
             return self._default_grouping(run_columns)
 
@@ -220,7 +226,8 @@ class WandBGrapher:
                 print(f"Error: Group config file not found: {self.config.group_config}")
                 return self._default_grouping(run_columns)
 
-            config_data = toml.load(self.config.group_config)
+            with open(self.config.group_config, "r") as f:
+                config_data = tomlkit.load(f)
             custom_groups = config_data.get("groups", {})
 
             if not custom_groups:
@@ -402,10 +409,20 @@ class WandBGrapher:
         plt.title(title, fontsize=14, fontweight="bold")
 
         if self.config.show_legend:
-            plt.legend()
+            if self.config.legend_outside:
+                plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
+            else:
+                plt.legend()
 
         plt.grid(True, alpha=0.3)
-        plt.tight_layout()
+
+        # Use tight_layout with different parameters based on legend position
+        if self.config.show_legend and self.config.legend_outside:
+            plt.tight_layout()
+            # Adjust to make room for external legend
+            plt.subplots_adjust(right=0.75)
+        else:
+            plt.tight_layout()
 
         # Save the plot
         output_dir = Path(self.config.output_dir)

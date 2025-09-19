@@ -464,7 +464,7 @@ class WandBVisualizer:
                             smoothed_values,
                             color=color,
                             alpha=0.3,
-                            linewidth=self.config.original_line_thickness,
+                            linewidth=self.graph_settings.original_line_thickness,
                         )
                     else:
                         ax.plot(
@@ -472,7 +472,7 @@ class WandBVisualizer:
                             run.values,
                             color=color,
                             alpha=0.3,
-                            linewidth=self.config.original_line_thickness,
+                            linewidth=self.graph_settings.original_line_thickness,
                         )
 
             # Plot the main line

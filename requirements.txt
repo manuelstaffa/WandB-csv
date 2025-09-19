@@ -1,0 +1,5 @@
+pandas>=1.5.0
+matplotlib>=3.5.0
+numpy>=1.21.0
+tyro>=0.3.0
+toml>=0.10.2

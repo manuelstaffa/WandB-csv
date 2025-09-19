@@ -1,0 +1,12 @@
+# Group configuration for WandB CSV to Graph Converter
+# Define custom groups that combine multiple run identifiers
+
+[groups]
+# Group reward functions together
+reward_functions = ["rf13", "rf14"]
+baseline_comparison = ["baseline", "rf1"]
+early_experiments = ["rf4", "rf5", "rf6"]
+advanced_experiments = ["rf10", "rf11", "rf12"]
+
+# You can create as many groups as needed
+# group_name = ["identifier1", "identifier2", ...]

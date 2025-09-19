@@ -1,0 +1,14 @@
+# Custom grouping configuration
+# Define custom groups that combine multiple run identifiers
+
+# Example: Combine rf13 and rf14 into a single "reward_functions" group
+[custom_groups]
+reward_functions = ["rf13", "rf14"]
+baseline_comparison = ["baseline", "rf1"]
+advanced_rewards = ["rf10", "rf11", "rf12"]
+
+# Color overrides for specific groups (optional)
+[group_colors]
+reward_functions = "#d62728"
+baseline_comparison = "#1f77b4"
+advanced_rewards = "#2ca02c"

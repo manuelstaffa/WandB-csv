@@ -83,6 +83,7 @@ class GraphSettings:
     font_weight: str = "normal"
     box_color: str = "#FFFFFF"
     line_thickness: float = 2.0
+    original_line_thickness: float = 0.5
     grid_color: str = "#CCCCCC"
     grid_thickness: float = 0.5
     line_width: float = 2.0
@@ -104,20 +105,9 @@ class WandBVisualizer:
 
     def __init__(self, config: Config):
         self.config = config
-        self.graph_settings = self._load_graph_settings()
+        self.graph_settings = GraphSettings()
         self.colors = self._load_colors()
         self.custom_groups = self._load_custom_groups()
-
-    def _load_graph_settings(self) -> GraphSettings:
-        """Load graph settings from graph.toml"""
-        graph_toml_path = Path("config/graph.toml")
-        if graph_toml_path.exists():
-            try:
-                data = toml.load(graph_toml_path)
-                return GraphSettings(**data)
-            except Exception as e:
-                warnings.warn(f"Error loading config/graph.toml: {e}. Using defaults.")
-        return GraphSettings()
 
     def _load_colors(self) -> List[str]:
         """Load colors from colors.toml"""
@@ -474,11 +464,15 @@ class WandBVisualizer:
                             smoothed_values,
                             color=color,
                             alpha=0.3,
-                            linewidth=0.5,
+                            linewidth=self.config.original_line_thickness,
                         )
                     else:
                         ax.plot(
-                            run.steps, run.values, color=color, alpha=0.3, linewidth=0.5
+                            run.steps,
+                            run.values,
+                            color=color,
+                            alpha=0.3,
+                            linewidth=self.config.original_line_thickness,
                         )
 
             # Plot the main line
@@ -678,24 +672,6 @@ def create_default_configs():
         }
         with open(config_dir / "colors.toml", "w") as f:
             toml.dump(default_colors, f)
-
-    # Create default graph.toml
-    if not (config_dir / "graph.toml").exists():
-        default_graph = {
-            "x_axis_name": "Step",
-            "y_axis_name": "Episodic Original Reward",
-            "envelope_opacity": 0.3,
-            "font_color": "#000000",
-            "font_size": 12,
-            "font_weight": "normal",
-            "box_color": "#FFFFFF",
-            "line_thickness": 2.0,
-            "grid_color": "#CCCCCC",
-            "grid_thickness": 0.5,
-            "line_width": 2.0,
-        }
-        with open(config_dir / "graph.toml", "w") as f:
-            toml.dump(default_graph, f)
 
 
 if __name__ == "__main__":

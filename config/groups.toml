@@ -1,12 +1,15 @@
-# Group configuration for WandB CSV to Graph Converter
-# Define custom groups that combine multiple run identifiers
+# Example groupings for runs
+# Groups are defined as "Group Name" = {"members": ["rf1", "rf2"], "dotted": false}
+# Set dotted = true to use dashed lines for that group
 
-[groups]
-# Group reward functions together
-reward_functions = ["rf13", "rf14"]
-baseline_comparison = ["baseline", "rf1"]
-early_experiments = ["rf4", "rf5", "rf6"]
-advanced_experiments = ["rf10", "rf11", "rf12"]
+[Baseline]
+members = ["baseline"]
+dotted = true
 
-# You can create as many groups as needed
-# group_name = ["identifier1", "identifier2", ...]
+["Shaping"]
+members = ["rf11", "rf12"]
+dotted = false
+
+["Shaping+Reasoning"]
+members = ["rf13", "rf14"]
+dotted = false

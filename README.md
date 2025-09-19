@@ -1,302 +1,245 @@
 # WandB CSV to Graph Converter
-### Required Parameters
 
-```bash
-python main.py --csv-path in/your_file.csv --atari-game kangaroo
-```werful tool to convert CSV files exported from Weights & Biases (WandB) into beautiful, customizable graphs with smoothing, grouping, and visualization options.
+A comprehensive tool to convert CSV files exported from wandb.ai to publication-ready graphs with customizable grouping, smoothing, and visualization options.
 
-## F### Batch Processing
+## Features
 
-For processing multiple games or configurations, you can use the batch utility:
-
-```bash
-python utils/batch_process.py wandb_data.csv kangaroo --preset analysis
-``` **EMA Smoothing**: Apply Exponential Moving Average smoothing to reduce noise
-- **Flexible Grouping**: Three grouping modes - none, default (by identifier), or custom
-- **Custom Group Configuration**: Define complex groups via TOML configuration files
-- **Envelope Visualization**: Show min/max bounds of grouped runs with optional smoothing
-- **Original Run Visibility**: Control whether to show individual runs when grouping
-- **Line Weight Control**: Customize line thickness for better visibility
-- **Color Customization**: Use custom color palettes via TOML configuration
-- **Flexible Output**: Save high-resolution images with timestamps
-- **Command Line Interface**: Easy-to-use CLI with sensible defaults
+- **Flexible Data Parsing**: Automatically parses WandB CSV files and extracts run information
+- **Smart Grouping**: Groups runs by name patterns (e.g., `rf14`, `baseline`) with optional custom grouping via TOML configuration
+- **Multiple Smoothing Options**: Support for various smoothing algorithms including EMA, moving average, min/max
+- **Customizable Envelopes**: Choose between min-max, standard deviation, or standard error envelopes
+- **Publication Ready**: Export to PDF, PNG, or processed CSV with customizable styling
+- **Configurable Visualization**: Full control over colors, fonts, legends, and layout via TOML configuration files
 
 ## Installation
-
-1. Clone or download this repository
-2. Install the required dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Place your WandB CSV export files in the `in/` directory
+## Quick Start
+
+```bash
+# Basic usage - create a PNG graph (default)
+python main.py --env-id kangaroo --csv-file in/kangaroo.csv --title "Kangaroo Training Results"
+
+# Export as PDF with higher DPI
+python main.py --env-id kangaroo --csv-file in/kangaroo.csv --type PDF --dpi 600
+
+# Export as SVG (vector graphics)
+python main.py --env-id kangaroo --csv-file in/kangaroo.csv --type SVG
+
+# Use custom grouping and smoothing
+python main.py --env-id kangaroo --csv-file in/kangaroo.csv --custom-groups config/my_groups.toml --smoothing average --smoothing-amount 0.8
+```
+
+## Command Line Arguments
+
+### Required Arguments
+- `--env-id`: Atari environment ID (e.g., `kangaroo`)
+- `--csv-file`: Path to the WandB CSV file
+
+### Optional Arguments
+- `--type`: Output format - `PNG` (default), `PDF`, `SVG`, or `CSV`
+- `--title`: Graph title (default: empty)
+- `--dpi`: Output DPI for images (default: 300)
+- `--custom-groups`: Path to custom groups TOML file (default: `config/groups.toml`)
+- `--smoothing`: Smoothing algorithm - `ema` (default), `average`, `min`, `max`, `mean`, `none`
+- `--smoothing-amount`: Smoothing strength from 0 (none) to 1 (max) (default: 0.95)
+- `--graph-envelope`: Envelope type - `std-dev` (default), `minmax`, `std-err`
+- `--envelope-smoothing`: Apply smoothing to envelope (default: true)
+- `--show-original-lines`: Show faded original lines behind aggregated data (default: false)
+- `--legend-position`: Legend placement - `inside` (default), `top`, `bottom`, `left`, `right`
 
 ## Project Structure
 
 ```
 WandB-csv/
-├── main.py                    # Main converter tool
-├── requirements.txt           # Dependencies  
-├── README.md                  # This guide
-├── config/
-│   ├── colors.toml           # Color configuration
-│   └── groups.toml           # Custom grouping configuration
-├── in/                       # Input CSV files (place your files here)
-├── output/                   # Generated graphs
-└── utils/
-    ├── batch_process.py      # Batch processing utility
-    ├── demo.py               # Feature demonstration
-    └── test.py               # Test suite
-```
-
-## Basic Usage
-
-### Required Parameters
-
-```bash
-python main.py --csv-path path/to/your/file.csv --atari-game kangaroo
-```
-
-### Common Usage Examples
-
-```bash
-# Basic usage with default grouping
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo
-
-# No grouping - show all individual runs
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo --group none
-
-# Custom grouping with configuration file
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
-    --group custom --group-config config/groups.toml
-
-# Envelope only (hide individual runs when grouped)
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
-    --no-show-original-when-grouped
-
-# Custom smoothing and line weight
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
-    --ema-smoothing 0.95 --line-weight 3.0
-
-# Custom labels and title with thick lines
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
-    --x-axis-label "Training Steps" \
-    --y-axis-label "Average Reward" \
-    --title "Kangaroo Training Results" \
-    --line-weight 2.5
-
-# High resolution output
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo --resolution-dpi 600
-
-# External legend with SVG output
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
-    --legend-outside --output-format svg --title "Clean Layout with External Legend"
-
-# SVG output format
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo --output-format svg
-
-# Smoothed envelope visualization
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
-    --smooth-envelope --ema-smoothing 0.95
-
-# Combined features: SVG output with smoothed envelope
-python main.py --csv-path in/wandb_export.csv --atari-game kangaroo \
-    --output-format svg --smooth-envelope --title "Smoothed Envelope Analysis"
+├── main.py                      # Main script
+├── requirements.txt             # Dependencies
+├── README.md                   # Documentation
+├── in/                         # Input CSV files
+│   └── kangaroo.csv
+├── out/                        # Generated output files (with timestamps)
+│   ├── kangaroo_20250920_120000_graph.png
+│   ├── kangaroo_20250920_120000_graph.pdf
+│   ├── kangaroo_20250920_120000_graph.svg
+│   └── kangaroo_20250920_120000_processed.csv
+├── config/                     # Configuration files
+│   ├── groups.toml            # Run grouping definitions
+│   ├── colors.toml            # Color palette
+│   └── graph.toml             # Graph styling
+└── utils/                      # Utility scripts
+    ├── test_visualizer.py     # Test suite
+    └── custom_example.py      # Extension example
 ```
 
 ## Configuration Files
 
-### Color Configuration
+The tool uses three TOML configuration files in the `config/` directory for customization:
 
-Create custom color palettes by editing `config/colors.toml`:
+### config/groups.toml - Run Grouping
+
+Define how runs should be grouped together:
+
+```toml
+[Baseline]
+members = ["baseline"]
+dotted = false
+
+["RF Group 1-5"]
+members = ["rf1", "rf2", "rf3", "rf4", "rf5"]
+dotted = false
+
+["RF Group 6-10"] 
+members = ["rf6", "rf7", "rf8", "rf9", "rf10"]
+dotted = true  # Use dashed lines
+```
+
+- `members`: List of run name patterns to include in this group
+- `dotted`: Use dashed lines for this group (default: false)
+
+### config/colors.toml - Color Palette
+
+Customize the colors used for different groups:
 
 ```toml
 colors = [
-    "#1f77b4",  # Blue
-    "#ff7f0e",  # Orange
-    "#2ca02c",  # Green
-    "#d62728",  # Red
-    # ... add more colors
+    "#1f77b4",  # blue
+    "#ff7f0e",  # orange
+    "#2ca02c",  # green
+    "#d62728",  # red
+    "#9467bd",  # purple
+    # ... add more as needed
 ]
 ```
 
-Use your custom colors:
-```bash
-python main.py --csv-path in/data.csv --atari-game kangaroo --config-file config/colors.toml
-```
+### config/graph.toml - Visual Styling
 
-### Custom Grouping
-
-The most powerful feature is custom grouping via TOML configuration files. Create a file like `config/groups.toml`:
+Control all visual aspects of the graph:
 
 ```toml
-[groups]
-reward_functions = ["rf13", "rf14"]
-baseline_comparison = ["baseline", "rf1"]
-early_experiments = ["rf4", "rf5", "rf6"]
-advanced_experiments = ["rf10", "rf11", "rf12"]
+# Axis labels
+x_axis_name = "Step"
+y_axis_name = "Episodic Original Reward"
+
+# Envelope (confidence band) opacity
+envelope_opacity = 0.3
+
+# Font settings
+font_color = "#000000"
+font_size = 12
+font_weight = "normal"  # "normal", "bold", "light"
+
+# Background and styling
+box_color = "#FFFFFF"
+line_thickness = 2.0
+line_width = 2.0
+
+# Grid settings
+grid_color = "#CCCCCC"
+grid_thickness = 0.5
 ```
 
-Use your custom groups:
-```bash
-python main.py --csv-path in/data.csv --atari-game kangaroo \
-    --group custom --group-config config/groups.toml
-```
+## Data Processing Pipeline
 
-**Grouping Modes:**
-- `--group none`: No grouping, show all runs individually
-- `--group default`: Group by run identifier (rf1, rf2, baseline, etc.)
-- `--group custom`: Use custom grouping from config file
+1. **CSV Parsing**: Reads WandB CSV and identifies run columns (excludes `_MIN` and `_MAX` columns)
+2. **Run Extraction**: Extracts run names from column headers using pattern matching
+3. **Grouping**: Groups runs either by default naming or custom TOML configuration
+4. **Data Alignment**: Interpolates all runs to a common step grid for aggregation
+5. **Smoothing**: Applies selected smoothing algorithm to individual runs or aggregated data
+6. **Envelope Calculation**: Computes confidence bands using selected method
+7. **Visualization**: Renders final graph with all styling options
 
-## Command Line Parameters
+## Smoothing Algorithms
 
-### Required
-- `--csv-path`: Path to the WandB CSV export file
-- `--atari-game`: Name of the Atari game/environment (e.g., "kangaroo")
+- **EMA (Exponential Moving Average)**: Time-weighted smoothing that gives more weight to recent values
+- **Average**: Simple moving average over a window
+- **Min/Max**: Moving minimum/maximum over a window
+- **Mean**: Same as average (alias)
+- **None**: No smoothing applied
 
-### Optional (with defaults)
-- `--ema-smoothing`: EMA smoothing factor (0.0-1.0, default: 0.9)
-- `--group`: Grouping mode - none/default/custom (default: default)
-- `--group-config`: Path to custom group configuration file (required for custom mode)
-- `--opacity`: Opacity for individual runs when grouped (0.0-1.0, default: 0.3)
-- `--show-envelope`: Show min/max envelope for groups (default: True)
-- `--smooth-envelope`: Apply EMA smoothing to envelope bounds (default: False)
-- `--show-original-when-grouped`: Show individual runs when grouping (default: True)
-- `--line-weight`: Line thickness for graphs (default: 2.0)
-- `--x-axis-label`: X-axis label (default: "Steps")
-- `--y-axis-label`: Y-axis label (default: "Episodic Reward")
-- `--title`: Graph title (default: auto-generated)
-- `--show-legend`: Show legend (default: True)
-- `--legend-outside`: Position legend outside the plot area (default: False)
-- `--resolution-dpi`: Output resolution (default: 300)
-- `--output-format`: Output format - png or svg (default: png)
-- `--output-dir`: Output directory (default: "output")
-- `--config-file`: Path to custom configuration TOML file
-- `--custom-groups`: List of custom group identifiers (deprecated - use custom grouping instead)
+The `smoothing-amount` parameter controls the strength:
+- `0.0`: No smoothing
+- `0.95`: Strong smoothing (default for EMA)
+- `1.0`: Maximum smoothing
 
-### Boolean Flags
-Use `--no-` prefix to disable boolean options:
-- `--no-show-envelope`: Hide envelope visualization
-- `--no-show-original-when-grouped`: Hide individual runs when grouping (envelope only)
-- `--no-show-legend`: Hide legend
+## Envelope Types
 
-## CSV File Format
+- **std-dev**: Mean ± standard deviation
+- **std-err**: Mean ± standard error
+- **minmax**: Minimum and maximum values across runs
 
-The tool expects CSV files exported from WandB with the following structure:
+## CSV Input Format
+
+The tool expects WandB CSV exports with the following structure:
 
 ```csv
-Step,ALE/Game-v5__date-game-identifier__number__timestamp - charts/Metric,ALE/Game-v5__date-game-identifier__number__timestamp - charts/Metric__MIN,ALE/Game-v5__date-game-identifier__number__timestamp - charts/Metric__MAX
+"Step","ALE/Kangaroo-v5__19-09-kangaroo-rf15__237__1758314296 - charts/Episodic_Original_Reward","ALE/Kangaroo-v5__19-09-kangaroo-rf15__237__1758314296 - charts/Episodic_Original_Reward__MIN",...
 ```
 
-- **Step**: Training step/episode number
-- **Metric columns**: Main data columns (MIN/MAX columns are automatically ignored)
-- **Run identifiers**: Extracted from column names (e.g., rf1, rf2, baseline)
+- First column: `Step`
+- Data columns: Run identifiers with metrics
+- MIN/MAX columns: Automatically filtered out
+- Run name extraction: Uses pattern matching to identify group names (e.g., `rf15`, `baseline`)
 
-## Output
+## Examples
 
-- Graphs are saved as PNG files in the specified output directory
-- Filename format: `{game_name}_{timestamp}.png`
-- The graph is also displayed on screen (if display is available)
-
-## Advanced Features
-
-### Multiple Group Combination
-
-Create sophisticated group combinations:
-
+### Basic PNG Export (Default)
 ```bash
-# Custom grouping with envelope-only visualization
-python main.py --csv-path in/data.csv --atari-game kangaroo \
-    --group custom --group-config config/groups.toml \
-    --no-show-original-when-grouped
-
-# Thick lines with custom grouping
-python main.py --csv-path in/data.csv --atari-game kangaroo \
-    --group custom --group-config config/groups.toml \
-    --line-weight 3.5 --opacity 0.2
+python main.py --env-id kangaroo --csv-file data/kangaroo.csv --title "Kangaroo Training Performance"
 ```
 
-### High-Quality Publication Figures
-
+### High-Resolution PDF with Custom Smoothing
 ```bash
-python main.py --csv-path in/data.csv --atari-game kangaroo \
-    --resolution-dpi 600 \
-    --ema-smoothing 0.95 \
-    --line-weight 2.5 \
-    --group custom --group-config config/groups.toml \
-    --title "Kangaroo: Reward Function Comparison" \
-    --x-axis-label "Training Episodes" \
-    --y-axis-label "Cumulative Reward"
+python main.py --env-id kangaroo --csv-file data/kangaroo.csv --type PDF --dpi 600 --smoothing average --smoothing-amount 0.7
 ```
 
-### Batch Processing
-
-For processing multiple graphs with different settings, use the batch processing utility:
-
+### SVG Export for Vector Graphics
 ```bash
-# Create analysis variations
-python batch_process.py wandb_export.csv kangaroo --preset analysis
-
-# Create publication-ready figures
-python batch_process.py wandb_export.csv kangaroo --preset publication
-
-# Create comparison graphs  
-python batch_process.py wandb_export.csv kangaroo --preset comparison
+python main.py --env-id kangaroo --csv-file data/kangaroo.csv --type SVG --title "Vector Graphics Export"
 ```
 
-### Manual Batch Processing
-
-For shell-based batch processing:
-
+### Show Individual Runs with Envelope
 ```bash
-#!/bin/bash
-for game in kangaroo pong breakout; do
-    python main.py --csv-path "in/wandb_${game}.csv" --atari-game "$game"
-done
+python main.py --env-id kangaroo --csv-file data/kangaroo.csv --show-original-lines --graph-envelope minmax
 ```
 
-## Additional Utilities
-
-### Test Suite
-Run the test suite to verify functionality:
+### Export Processed Data as CSV
 ```bash
-python utils/test.py
+python main.py --env-id kangaroo --csv-file data/kangaroo.csv --type CSV
 ```
 
-### Demo Script  
-See all features in action:
+### Custom Grouping with External Legend
 ```bash
-python utils/demo.py
+python main.py --env-id kangaroo --csv-file data/kangaroo.csv --custom-groups config/experiment_groups.toml --legend-position top
 ```
 
-### Batch Processing
-Process multiple variations automatically:
-```bash
-python utils/batch_process.py --help
-```
+## Output Files
+
+All output files are saved to the `out/` directory with timestamps:
+
+- **PNG/PDF/SVG**: `out/<input_filename>_YYYYMMDD_HHMMSS_graph.png/pdf/svg`
+- **CSV**: `out/<input_filename>_YYYYMMDD_HHMMSS_processed.csv` with columns: Step, Value, Group, Run
 
 ## Troubleshooting
 
-### Common Issues
+### No runs found
+- Check that your CSV file contains data columns with the expected naming pattern
+- Verify that the run names contain the expected group identifiers
 
-1. **Missing dependencies**: Install all requirements with `pip install -r requirements.txt`
-2. **File not found**: Check the CSV file path and ensure it exists
-3. **No data for game**: Verify the game name matches the column names in your CSV
-4. **Empty graphs**: Check if your CSV contains valid numeric data (not all empty strings)
+### Import errors
+- Ensure all dependencies are installed: `pip install -r requirements.txt`
+- For TOML import issues, try: `pip install toml`
 
-### Debug Tips
+### Empty graphs
+- Check that your custom groups TOML file correctly references the run names in your data
+- Use `--type csv` to export processed data and verify grouping is working correctly
 
-- Use `--group none` to see individual runs without any grouping
-- Use `--no-show-original-when-grouped` to see only group means and envelopes
-- Check the console output for data loading and grouping information
-- Verify your CSV file structure matches the expected format
-- For custom grouping, check that your group config file has the correct format
+### Configuration not applied
+- Ensure TOML files are in the `config/` directory
+- Check TOML syntax using an online validator
 
 ## Contributing
 
-Feel free to contribute improvements, bug fixes, or new features. The code is designed to be modular and extensible.
-
-## License
-
-This tool is provided as-is for research and educational purposes.
+Feel free to submit issues and enhancement requests! The tool is designed to be easily extensible for different naming schemes and visualization requirements.

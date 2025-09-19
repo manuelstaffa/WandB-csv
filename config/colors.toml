@@ -1,46 +1,14 @@
-# Color configuration for WandB CSV to Graph Converter
-# You can customize the colors used for different groups/runs
-
+# Color palette for graph lines
+# Add more colors as needed
 colors = [
-    # Primary colors
-    "#1f77b4", # Blue
-    "#ff7f0e", # Orange
-    "#2ca02c", # Green
-    "#d62728", # Red
-    "#9467bd", # Purple
-
-    # Secondary colors
-    "#8c564b", # Brown
-    "#e377c2", # Pink
-    "#7f7f7f", # Gray
-    "#bcbd22", # Olive
-    "#17becf", # Cyan
-
-    # Light variants
-    "#aec7e8", # Light blue
-    "#ffbb78", # Light orange
-    "#98df8a", # Light green
-    "#ff9896", # Light red
-    "#c5b0d5", # Light purple
-
-    # Additional colors
-    "#c49c94", # Light brown
-    "#f7b6d3", # Light pink
-    "#c7c7c7", # Light gray
-    "#dbdb8d", # Light olive
-    "#9edae5", # Light cyan
-
-    # Dark variants
-    "#393b79", # Dark blue
-    "#637939", # Dark green
-    "#8c6d31", # Dark orange
-    "#843c39", # Dark red
-    "#7b4173", # Dark purple
-
-    # Additional variants
-    "#5254a3", # Medium blue
-    "#8ca252", # Medium green
-    "#bd9e39", # Medium yellow
-    "#ad494a", # Medium red
-    "#a55194", # Medium purple
+    "#1f77b4",  # blue
+    "#ff7f0e",  # orange
+    "#2ca02c",  # green
+    "#d62728",  # red
+    "#9467bd",  # purple
+    "#8c564b",  # brown
+    "#e377c2",  # pink
+    "#7f7f7f",  # gray
+    "#bcbd22",  # olive
+    "#17becf"   # cyan
 ]

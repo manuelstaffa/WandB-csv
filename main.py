@@ -2,84 +2,133 @@
 """
 WandB CSV to Graph Converter
 
-A tool to convert CSV files exported from WandB into visualized graphs with
-smoothing, grouping, and customization options.
+A tool to convert CSV files from wandb.ai to graphs with customizable grouping,
+smoothing, and visualization options.
 """
 
+import re
+import warnings
+from pathlib import Path
+from typing import Dict, List, Tuple, Optional
+from dataclasses import dataclass
+from enum import Enum
+from datetime import datetime
+
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
+import matplotlib.patches as patches
 import tyro
-import re
-from datetime import datetime
-from pathlib import Path
-from typing import Optional, List, Dict
-from dataclasses import dataclass
+import toml
 
-try:
-    import tomlkit
-except ImportError:
-    print("Warning: tomlkit package not found. Config file support disabled.")
-    tomlkit = None
+
+class OutputType(Enum):
+    PDF = "pdf"
+    PNG = "png"
+    SVG = "svg"
+    CSV = "csv"
+
+
+class SmoothingType(Enum):
+    NONE = "none"
+    AVERAGE = "average"
+    MIN = "min"
+    MAX = "max"
+    MEAN = "mean"
+    EMA = "ema"  # Exponential Moving Average (time weighted EMA)
+
+
+class EnvelopeType(Enum):
+    MINMAX = "minmax"
+    STD_DEV = "std-dev"
+    STD_ERR = "std-err"
+
+
+class LegendPosition(Enum):
+    INSIDE = "inside"
+    TOP = "top"
+    BOTTOM = "bottom"
+    LEFT = "left"
+    RIGHT = "right"
 
 
 @dataclass
-class GraphConfig:
-    """Configuration for graph generation"""
+class Config:
+    """Main configuration for the visualizer."""
 
-    csv_path: str  # Required: Path to the CSV file
-    atari_game: str  # Required: Atari game/environment name (e.g., "kangaroo")
-
-    # Optional parameters with defaults
-    ema_smoothing: float = 0.9  # EMA smoothing factor (0.0 to 1.0)
-    group: str = "default"  # Grouping mode: none/default/custom
-    group_config: Optional[str] = None  # Path to custom group config file
-    opacity: float = 0.3  # Opacity for individual runs when grouped (0.0 to 1.0)
-    show_envelope: bool = True  # Show envelope for groups
-    smooth_envelope: bool = False  # Apply EMA smoothing to envelope bounds
-    show_original_when_grouped: bool = True  # Show original runs when grouping
-    line_weight: float = 2.0  # Line weight for graphs
-    x_axis_label: str = "Steps"  # X-axis label
-    y_axis_label: str = "Episodic Reward"  # Y-axis label
-    title: str = ""  # Graph title (auto-generated if empty)
-    show_legend: bool = True  # Whether to show legend
-    legend_outside: bool = False  # Position legend outside the plot area
-    resolution_dpi: int = 300  # Resolution for output image
-    output_format: str = "png"  # Output format: png or svg
-    output_dir: str = "output"  # Output directory
-    config_file: Optional[str] = None  # Path to custom config TOML file
-    custom_groups: Optional[List[str]] = (
-        None  # Custom group identifiers to combine (deprecated)
-    )
+    env_id: str
+    csv_file: str
+    type: OutputType = OutputType.PNG
+    title: str = ""
+    dpi: int = 300
+    custom_groups: Optional[str] = "config/groups.toml"
+    smoothing: SmoothingType = SmoothingType.EMA
+    smoothing_amount: float = 0.9
+    graph_envelope: EnvelopeType = EnvelopeType.STD_DEV
+    envelope_smoothing: bool = True
+    show_original_graph: bool = False
+    original_graph_smoothing: bool = False
+    legend_position: LegendPosition = LegendPosition.INSIDE
 
 
-class WandBGrapher:
-    """Main class for converting WandB CSV to graphs"""
+@dataclass
+class GraphSettings:
+    """Graph styling settings from graph.toml"""
 
-    def __init__(self, config: GraphConfig):
+    x_axis_name: str = "Step"
+    y_axis_name: str = "Episodic Original Reward"
+    envelope_opacity: float = 0.3
+    font_color: str = "#000000"
+    font_size: int = 12
+    font_weight: str = "normal"
+    box_color: str = "#FFFFFF"
+    line_thickness: float = 2.0
+    grid_color: str = "#CCCCCC"
+    grid_thickness: float = 0.5
+    line_width: float = 2.0
+
+
+@dataclass
+class RunData:
+    """Data for a single run"""
+
+    name: str
+    group: str
+    steps: np.ndarray
+    values: np.ndarray
+    is_dotted: bool = False
+
+
+class WandBVisualizer:
+    """Main visualizer class for converting WandB CSV files to graphs."""
+
+    def __init__(self, config: Config):
         self.config = config
+        self.graph_settings = self._load_graph_settings()
         self.colors = self._load_colors()
-        self.df = None
-        self.groups = {}
+        self.custom_groups = self._load_custom_groups()
+
+    def _load_graph_settings(self) -> GraphSettings:
+        """Load graph settings from graph.toml"""
+        graph_toml_path = Path("config/graph.toml")
+        if graph_toml_path.exists():
+            try:
+                data = toml.load(graph_toml_path)
+                return GraphSettings(**data)
+            except Exception as e:
+                warnings.warn(f"Error loading config/graph.toml: {e}. Using defaults.")
+        return GraphSettings()
 
     def _load_colors(self) -> List[str]:
-        """Load colors from config file or use defaults"""
-        if (
-            self.config.config_file
-            and Path(self.config.config_file).exists()
-            and tomlkit
-        ):
+        """Load colors from colors.toml"""
+        colors_toml_path = Path("config/colors.toml")
+        if colors_toml_path.exists():
             try:
-                with open(self.config.config_file, "r") as f:
-                    config_data = tomlkit.load(f)
-                return config_data.get("colors", self._default_colors())
+                data = toml.load(colors_toml_path)
+                return data.get("colors", self._default_colors())
             except Exception as e:
-                print(
-                    f"Warning: Could not load config file {self.config.config_file}: {e}"
-                )
-                return self._default_colors()
-        else:
-            return self._default_colors()
+                warnings.warn(f"Error loading config/colors.toml: {e}. Using defaults.")
+        return self._default_colors()
 
     def _default_colors(self) -> List[str]:
         """Default color palette"""
@@ -94,384 +143,559 @@ class WandBGrapher:
             "#7f7f7f",
             "#bcbd22",
             "#17becf",
-            "#aec7e8",
-            "#ffbb78",
-            "#98df8a",
-            "#ff9896",
-            "#c5b0d5",
-            "#c49c94",
-            "#f7b6d3",
-            "#c7c7c7",
-            "#dbdb8d",
-            "#9edae5",
-            "#393b79",
-            "#637939",
-            "#8c6d31",
-            "#843c39",
-            "#7b4173",
-            "#5254a3",
-            "#8ca252",
-            "#bd9e39",
-            "#ad494a",
-            "#a55194",
         ]
 
-    def load_data(self):
-        """Load and preprocess the CSV data"""
-        print(f"Loading data from {self.config.csv_path}")
-        self.df = pd.read_csv(self.config.csv_path)
+    def _load_custom_groups(self) -> Optional[Dict[str, Dict]]:
+        """Load custom groups from groups.toml"""
+        if not self.config.custom_groups:
+            return None
 
-        # Filter columns to remove MIN/MAX and keep only relevant ones
-        columns_to_keep = ["Step"]
-        run_columns = []
-
-        for col in self.df.columns[1:]:  # Skip 'Step' column
-            if "__MIN" in col or "__MAX" in col:
-                continue
-            if self.config.atari_game.lower() in col.lower():
-                columns_to_keep.append(col)
-                run_columns.append(col)
-
-        self.df = self.df[columns_to_keep]
-
-        # Convert to numeric, replacing empty strings with NaN
-        for col in run_columns:
-            self.df[col] = pd.to_numeric(self.df[col], errors="coerce")
-
-        print(f"Loaded {len(run_columns)} runs for game '{self.config.atari_game}'")
-        return run_columns
-
-    def extract_run_identifier(self, column_name: str) -> str:
-        """Extract run identifier from column name"""
-        # Pattern: ALE/Game-v5__date-game-identifier__number__timestamp
-        pattern = rf"ALE/{re.escape(self.config.atari_game)}-v\d+__.*?-{re.escape(self.config.atari_game)}-([^_]+)__"
-        match = re.search(pattern, column_name, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-        # Fallback: look for any identifier after game name
-        fallback_pattern = rf"{re.escape(self.config.atari_game)}-([^_]+)"
-        match = re.search(fallback_pattern, column_name, re.IGNORECASE)
-        if match:
-            return match.group(1)
-
-        return "unknown"
-
-    def group_runs(self, run_columns: List[str]) -> Dict[str, List[str]]:
-        """Group runs by their identifiers based on grouping mode"""
-
-        if self.config.group == "none":
-            # No grouping - each run is its own group
-            return {col: [col] for col in run_columns}
-
-        elif self.config.group == "custom":
-            # Custom grouping from config file
-            if not self.config.group_config:
-                print(
-                    "Warning: Custom grouping requested but no group config file provided. Using default grouping."
-                )
-                return self._default_grouping(run_columns)
-
-            return self._load_custom_groups(run_columns)
-
-        else:  # default
-            # Default grouping by identifier
-            return self._default_grouping(run_columns)
-
-    def _default_grouping(self, run_columns: List[str]) -> Dict[str, List[str]]:
-        """Default grouping by run identifier"""
-        groups = {}
-
-        for col in run_columns:
-            identifier = self.extract_run_identifier(col)
-            if identifier not in groups:
-                groups[identifier] = []
-            groups[identifier].append(col)
-
-        # Handle legacy custom_groups parameter (deprecated)
-        if self.config.custom_groups:
-            print(
-                "Warning: --custom-groups is deprecated. Use --group custom with --group-config instead."
-            )
-            combined_group = {}
-            remaining_groups = {}
-
-            for group_name, columns in groups.items():
-                if group_name in self.config.custom_groups:
-                    for col in columns:
-                        if "combined" not in combined_group:
-                            combined_group["combined"] = []
-                        combined_group["combined"].append(col)
-                else:
-                    remaining_groups[group_name] = columns
-
-            groups = {**combined_group, **remaining_groups}
-
-        return groups
-
-    def _load_custom_groups(self, run_columns: List[str]) -> Dict[str, List[str]]:
-        """Load custom groups from config file"""
-        if not tomlkit:
-            print(
-                "Error: tomlkit package required for custom grouping. Install with: pip install tomlkit"
-            )
-            return self._default_grouping(run_columns)
+        groups_path = Path(self.config.custom_groups)
+        if not groups_path.exists():
+            return None
 
         try:
-            if self.config.group_config is None:
-                print("Error: Group config path is None")
-                return self._default_grouping(run_columns)
-
-            if not Path(self.config.group_config).exists():
-                print(f"Error: Group config file not found: {self.config.group_config}")
-                return self._default_grouping(run_columns)
-
-            with open(self.config.group_config, "r") as f:
-                config_data = tomlkit.load(f)
-            custom_groups = config_data.get("groups", {})
-
-            if not custom_groups:
-                print(
-                    f"Warning: No groups found in config file {self.config.group_config}. Using default grouping."
-                )
-                return self._default_grouping(run_columns)
-
-            # Create mapping from run identifier to columns
-            identifier_to_columns = {}
-            for col in run_columns:
-                identifier = self.extract_run_identifier(col)
-                if identifier not in identifier_to_columns:
-                    identifier_to_columns[identifier] = []
-                identifier_to_columns[identifier].append(col)
-
-            # Build groups based on config
-            result_groups = {}
-            used_columns = set()
-
-            for group_name, identifiers in custom_groups.items():
-                group_columns = []
-                for identifier in identifiers:
-                    if identifier in identifier_to_columns:
-                        group_columns.extend(identifier_to_columns[identifier])
-                        used_columns.update(identifier_to_columns[identifier])
-
-                if group_columns:
-                    result_groups[group_name] = group_columns
-
-            # Add any remaining ungrouped runs
-            for col in run_columns:
-                if col not in used_columns:
-                    identifier = self.extract_run_identifier(col)
-                    if identifier not in result_groups:
-                        result_groups[identifier] = []
-                    result_groups[identifier].append(col)
-
-            print(
-                f"Loaded {len(custom_groups)} custom groups from {self.config.group_config}"
-            )
-            return result_groups
-
-        except Exception as e:
-            print(f"Error loading custom groups from {self.config.group_config}: {e}")
-            return self._default_grouping(run_columns)
-
-    def apply_ema_smoothing(self, data: pd.Series) -> pd.Series:
-        """Apply Exponential Moving Average smoothing"""
-        if self.config.ema_smoothing == 0:
+            data = toml.load(groups_path)
             return data
+        except Exception as e:
+            warnings.warn(f"Error loading {self.config.custom_groups}: {e}")
+            return None
 
-        smoothed = data.copy()
-        alpha = 1 - self.config.ema_smoothing
+    def parse_csv(self) -> List[RunData]:
+        """Parse the WandB CSV file and extract run data."""
+        csv_path = Path(self.config.csv_file)
+        if not csv_path.exists():
+            raise FileNotFoundError(f"CSV file not found: {self.config.csv_file}")
 
-        for i in range(1, len(smoothed)):
-            if not pd.isna(smoothed.iloc[i]) and not pd.isna(smoothed.iloc[i - 1]):
-                smoothed.iloc[i] = (
-                    alpha * smoothed.iloc[i] + (1 - alpha) * smoothed.iloc[i - 1]
+        df = pd.read_csv(csv_path)
+        runs = []
+
+        # Get column names and filter out MIN/MAX columns
+        columns = [col for col in df.columns if not col.endswith(("__MIN", "__MAX"))]
+        data_columns = [col for col in columns if col != "Step"]
+
+        for col in data_columns:
+            # Extract run information from column name
+            run_info = self._extract_run_info(col)
+            if run_info:
+                run_name, group_name = run_info
+
+                # Extract data (remove NaN values)
+                mask = ~df[col].isna()
+                steps = df.loc[mask, "Step"].values
+                values = df.loc[mask, col].values
+
+                if len(steps) > 0:  # Only add runs with data
+                    runs.append(
+                        RunData(
+                            name=run_name,
+                            group=group_name,
+                            steps=np.array(steps),
+                            values=np.array(values),
+                        )
+                    )
+
+        return self._apply_grouping(runs)
+
+    def _extract_run_info(self, column_name: str) -> Optional[Tuple[str, str]]:
+        """Extract run name and group from column header."""
+        # Pattern to match: ALE/Kangaroo-v5__date-env_id-GROUP__number__timestamp - charts/...
+        # We want to extract the GROUP part
+        pattern = rf".*?{self.config.env_id}-([^_]+)__.*"
+        match = re.search(pattern, column_name)
+
+        if match:
+            group_name = match.group(1)
+            return column_name, group_name
+
+        return None
+
+    def _apply_grouping(self, runs: List[RunData]) -> List[RunData]:
+        """Apply custom grouping if specified, otherwise use default grouping."""
+        if not self.custom_groups:
+            return runs
+
+        # Create a mapping of group names to new group names
+        group_mapping = {}
+        dotted_groups = set()
+
+        for group_name, group_config in self.custom_groups.items():
+            if isinstance(group_config, dict):
+                members = group_config.get("members", [])
+                is_dotted = group_config.get("dotted", False)
+                if is_dotted:
+                    dotted_groups.add(group_name)
+            else:
+                # Legacy format: just a list
+                members = group_config
+
+            for member in members:
+                group_mapping[member] = group_name
+
+        # Apply grouping
+        grouped_runs = []
+        for run in runs:
+            new_group = group_mapping.get(run.group, run.group)
+            is_dotted = new_group in dotted_groups
+
+            # Only include runs that are in the custom groups (if custom groups are specified)
+            if run.group in group_mapping:
+                grouped_runs.append(
+                    RunData(
+                        name=run.name,
+                        group=new_group,
+                        steps=run.steps,
+                        values=run.values,
+                        is_dotted=is_dotted,
+                    )
                 )
+
+        return grouped_runs
+
+    def smooth_data(self, runs: List[RunData]) -> List[RunData]:
+        """Apply smoothing to the run data."""
+        if self.config.smoothing == SmoothingType.NONE:
+            return runs
+
+        smoothed_runs = []
+        for run in runs:
+            smoothed_values = self._apply_smoothing(
+                run.values, self.config.smoothing, self.config.smoothing_amount
+            )
+            smoothed_runs.append(
+                RunData(
+                    name=run.name,
+                    group=run.group,
+                    steps=run.steps,
+                    values=smoothed_values,
+                    is_dotted=run.is_dotted,
+                )
+            )
+
+        return smoothed_runs
+
+    def _apply_smoothing(
+        self, values: np.ndarray, smoothing_type: SmoothingType, amount: float
+    ) -> np.ndarray:
+        """Apply the specified smoothing algorithm."""
+        if smoothing_type == SmoothingType.NONE or amount == 0:
+            return values
+
+        if smoothing_type == SmoothingType.EMA:
+            return self._exponential_moving_average(values, amount)
+        elif smoothing_type == SmoothingType.AVERAGE:
+            window_size = max(1, int(len(values) * (1 - amount)))
+            return self._moving_average(values, window_size)
+        elif smoothing_type == SmoothingType.MIN:
+            window_size = max(1, int(len(values) * (1 - amount)))
+            return self._moving_min(values, window_size)
+        elif smoothing_type == SmoothingType.MAX:
+            window_size = max(1, int(len(values) * (1 - amount)))
+            return self._moving_max(values, window_size)
+        elif smoothing_type == SmoothingType.MEAN:
+            # Same as average for now
+            window_size = max(1, int(len(values) * (1 - amount)))
+            return self._moving_average(values, window_size)
+
+        return values
+
+    def _exponential_moving_average(
+        self, values: np.ndarray, alpha: float
+    ) -> np.ndarray:
+        """Apply exponential moving average smoothing."""
+        if len(values) == 0:
+            return values
+
+        smoothed = np.zeros_like(values)
+        smoothed[0] = values[0]
+
+        for i in range(1, len(values)):
+            smoothed[i] = alpha * smoothed[i - 1] + (1 - alpha) * values[i]
 
         return smoothed
 
-    def create_graph(self):
-        """Create the main graph"""
-        run_columns = self.load_data()
-        groups = self.group_runs(run_columns)
+    def _moving_average(self, values: np.ndarray, window_size: int) -> np.ndarray:
+        """Apply moving average smoothing."""
+        if window_size <= 1:
+            return values
 
-        # Determine if we're doing grouping (more than one run per group)
-        is_grouping = any(len(columns) > 1 for columns in groups.values())
+        return np.convolve(values, np.ones(window_size) / window_size, mode="same")
+
+    def _moving_min(self, values: np.ndarray, window_size: int) -> np.ndarray:
+        """Apply moving minimum smoothing."""
+        if window_size <= 1:
+            return values
+
+        result = np.zeros_like(values)
+        for i in range(len(values)):
+            start = max(0, i - window_size // 2)
+            end = min(len(values), i + window_size // 2 + 1)
+            result[i] = np.min(values[start:end])
+
+        return result
+
+    def _moving_max(self, values: np.ndarray, window_size: int) -> np.ndarray:
+        """Apply moving maximum smoothing."""
+        if window_size <= 1:
+            return values
+
+        result = np.zeros_like(values)
+        for i in range(len(values)):
+            start = max(0, i - window_size // 2)
+            end = min(len(values), i + window_size // 2 + 1)
+            result[i] = np.max(values[start:end])
+
+        return result
+
+    def create_visualization(self, runs: List[RunData]) -> None:
+        """Create the visualization based on the configuration."""
+        if self.config.type == OutputType.CSV:
+            self._save_as_csv(runs)
+        else:
+            self._create_plot(runs)
+
+    def _save_as_csv(self, runs: List[RunData]) -> None:
+        """Save processed data as CSV."""
+        # Group runs by group name
+        grouped_data = {}
+        for run in runs:
+            if run.group not in grouped_data:
+                grouped_data[run.group] = []
+            grouped_data[run.group].append(run)
+
+        # Create output filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = Path("out") / f"{self.config.env_id}_{timestamp}_processed.csv"
+
+        # Combine all data into a single DataFrame
+        all_data = []
+        for group_name, group_runs in grouped_data.items():
+            for run in group_runs:
+                df_run = pd.DataFrame(
+                    {
+                        "Step": run.steps,
+                        "Value": run.values,
+                        "Group": group_name,
+                        "Run": run.name,
+                    }
+                )
+                all_data.append(df_run)
+
+        if all_data:
+            combined_df = pd.concat(all_data, ignore_index=True)
+            combined_df.to_csv(output_path, index=False)
+            print(f"Processed data saved to: {output_path}")
+
+    def _create_plot(self, runs: List[RunData]) -> None:
+        """Create matplotlib plot."""
+        # Group runs by group name
+        grouped_data = {}
+        for run in runs:
+            if run.group not in grouped_data:
+                grouped_data[run.group] = []
+            grouped_data[run.group].append(run)
 
         # Set up the plot
-        plt.figure(figsize=(12, 8))
+        plt.style.use("default")
+        fig, ax = plt.subplots(figsize=(12, 8), dpi=self.config.dpi)
 
+        # Apply graph settings
+        ax.set_xlabel(
+            self.graph_settings.x_axis_name,
+            fontsize=self.graph_settings.font_size,
+            color=self.graph_settings.font_color,
+            weight=self.graph_settings.font_weight,
+        )
+        ax.set_ylabel(
+            self.graph_settings.y_axis_name,
+            fontsize=self.graph_settings.font_size,
+            color=self.graph_settings.font_color,
+            weight=self.graph_settings.font_weight,
+        )
+
+        if self.config.title:
+            ax.set_title(
+                self.config.title,
+                fontsize=self.graph_settings.font_size + 2,
+                color=self.graph_settings.font_color,
+                weight=self.graph_settings.font_weight,
+            )
+
+        # Grid settings
+        ax.grid(
+            True,
+            color=self.graph_settings.grid_color,
+            linewidth=self.graph_settings.grid_thickness,
+        )
+        ax.set_facecolor(self.graph_settings.box_color)
+
+        # Plot each group
+        legend_elements = []
         color_idx = 0
 
-        for group_name, columns in groups.items():
+        for group_name, group_runs in grouped_data.items():
             color = self.colors[color_idx % len(self.colors)]
             color_idx += 1
 
-            all_data = []
-            steps = None
+            # Aggregate data for the group
+            aggregated_data = self._aggregate_group_data(group_runs)
 
-            for col in columns:
-                if self.df is None:
-                    continue
+            if aggregated_data is None:
+                continue
 
-                data = self.df[["Step", col]].dropna()
-                if len(data) == 0:
-                    continue
+            steps, mean_values, envelope_data = aggregated_data
 
-                # Apply smoothing
-                smoothed_data = self.apply_ema_smoothing(data[col])
-                steps = np.array(data["Step"].values)
-                smoothed_values = np.array(smoothed_data.values)
+            # Determine line style
+            linestyle = "--" if any(run.is_dotted for run in group_runs) else "-"
 
-                if is_grouping and len(columns) > 1:
-                    # We're grouping and this group has multiple runs
-                    if self.config.show_original_when_grouped:
-                        # Plot individual runs with low opacity
-                        plt.plot(
-                            steps,
-                            smoothed_values,
-                            color=color,
-                            alpha=self.config.opacity,
-                            linewidth=self.config.line_weight * 0.7,
-                        )
-                    all_data.append(smoothed_values)
-                else:
-                    # Single run or no grouping - plot normally
-                    plt.plot(
-                        steps,
-                        smoothed_values,
-                        color=color,
-                        label=group_name,
-                        linewidth=self.config.line_weight,
-                    )
-
-            # Plot group mean and envelope if we're grouping and have multiple runs
-            if is_grouping and len(columns) > 1 and all_data and steps is not None:
-                # Align all data to the same length (use shortest)
-                min_length = min(len(d) for d in all_data)
-                aligned_data = np.array([d[:min_length] for d in all_data])
-
-                # Calculate statistics
-                mean_data = np.mean(aligned_data, axis=0)
-                steps_aligned = np.array(steps[:min_length])
-
-                # Calculate envelope bounds using min/max of all runs
-                lower_bound = np.min(aligned_data, axis=0)
-                upper_bound = np.max(aligned_data, axis=0)
-
-                # Apply EMA smoothing to envelope bounds if requested
-                if self.config.smooth_envelope:
-                    alpha = self.config.ema_smoothing
-                    # Smooth lower bound
-                    smoothed_lower = np.zeros_like(lower_bound)
-                    smoothed_lower[0] = lower_bound[0]
-                    for i in range(1, len(lower_bound)):
-                        smoothed_lower[i] = (
-                            alpha * smoothed_lower[i - 1] + (1 - alpha) * lower_bound[i]
-                        )
-
-                    # Smooth upper bound
-                    smoothed_upper = np.zeros_like(upper_bound)
-                    smoothed_upper[0] = upper_bound[0]
-                    for i in range(1, len(upper_bound)):
-                        smoothed_upper[i] = (
-                            alpha * smoothed_upper[i - 1] + (1 - alpha) * upper_bound[i]
-                        )
-
-                    lower_bound = smoothed_lower
-                    upper_bound = smoothed_upper
-
-                # Plot mean line
-                plt.plot(
-                    steps_aligned,
-                    mean_data,
+            # Plot the envelope if requested
+            if envelope_data is not None:
+                lower, upper = envelope_data
+                ax.fill_between(
+                    steps,
+                    lower,
+                    upper,
+                    alpha=self.graph_settings.envelope_opacity,
                     color=color,
-                    label=group_name,
-                    linewidth=self.config.line_weight,
                 )
 
-                # Plot envelope if requested
-                if self.config.show_envelope:
-                    plt.fill_between(
-                        steps_aligned, lower_bound, upper_bound, color=color, alpha=0.2
-                    )
+            # Plot original graphs if requested
+            if self.config.show_original_graph:
+                for run in group_runs:
+                    # Apply smoothing to original graph if requested
+                    if self.config.original_graph_smoothing:
+                        smoothed_values = self._apply_smoothing(
+                            run.values,
+                            self.config.smoothing,
+                            self.config.smoothing_amount,
+                        )
+                        ax.plot(
+                            run.steps,
+                            smoothed_values,
+                            color=color,
+                            alpha=0.3,
+                            linewidth=0.5,
+                        )
+                    else:
+                        ax.plot(
+                            run.steps, run.values, color=color, alpha=0.3, linewidth=0.5
+                        )
 
-        # Customize the plot
-        plt.xlabel(self.config.x_axis_label, fontsize=12)
-        plt.ylabel(self.config.y_axis_label, fontsize=12)
+            # Plot the main line
+            ax.plot(
+                steps,
+                mean_values,
+                color=color,
+                linewidth=self.graph_settings.line_width,
+                linestyle=linestyle,
+                label=group_name,
+            )
 
-        title = (
-            self.config.title
-            if self.config.title
-            else f"{self.config.atari_game.title()} - Training Progress"
-        )
-        plt.title(title, fontsize=14, fontweight="bold")
+            # Create legend element
+            legend_elements.append(
+                patches.Rectangle((0, 0), 1, 1, facecolor=color, label=group_name)
+            )
 
-        if self.config.show_legend:
-            if self.config.legend_outside:
-                plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-            else:
-                plt.legend()
-
-        plt.grid(True, alpha=0.3)
-
-        # Use tight_layout with different parameters based on legend position
-        if self.config.show_legend and self.config.legend_outside:
-            plt.tight_layout()
-            # Adjust to make room for external legend
-            plt.subplots_adjust(right=0.75)
-        else:
-            plt.tight_layout()
+        # Add legend
+        self._add_legend(ax, legend_elements)
 
         # Save the plot
-        output_dir = Path(self.config.output_dir)
-        output_dir.mkdir(exist_ok=True)
-
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{self.config.atari_game}_{timestamp}.{self.config.output_format}"
-        output_path = output_dir / filename
-
-        if self.config.output_format == "svg":
-            plt.savefig(output_path, format="svg", bbox_inches="tight")
-        else:  # png
-            plt.savefig(
-                output_path, dpi=self.config.resolution_dpi, bbox_inches="tight"
-            )
+        output_path = (
+            Path("out")
+            / f"{self.config.env_id}_{timestamp}_graph.{self.config.type.value}"
+        )
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=self.config.dpi, bbox_inches="tight")
+        plt.close()
 
         print(f"Graph saved to: {output_path}")
 
-        plt.show()
+    def _aggregate_group_data(
+        self, group_runs: List[RunData]
+    ) -> Optional[
+        Tuple[np.ndarray, np.ndarray, Optional[Tuple[np.ndarray, np.ndarray]]]
+    ]:
+        """Aggregate data for a group of runs."""
+        if not group_runs:
+            return None
+
+        # Find common step range
+        min_step = max(run.steps.min() for run in group_runs)
+        max_step = min(run.steps.max() for run in group_runs)
+
+        if min_step >= max_step:
+            return None
+
+        # Create interpolated data on common grid
+        common_steps = np.linspace(min_step, max_step, 1000)
+        interpolated_values = []
+
+        for run in group_runs:
+            interpolated = np.interp(common_steps, run.steps, run.values)
+            interpolated_values.append(interpolated)
+
+        if not interpolated_values:
+            return None
+
+        values_array = np.array(interpolated_values)
+
+        # Calculate mean
+        mean_values = np.mean(values_array, axis=0)
+
+        # Apply smoothing to mean if requested
+        if self.config.envelope_smoothing:
+            mean_values = self._apply_smoothing(
+                mean_values, self.config.smoothing, self.config.smoothing_amount
+            )
+
+        # Calculate envelope
+        envelope_data = None
+        if len(group_runs) > 1:
+            lower = None
+            upper = None
+
+            if self.config.graph_envelope == EnvelopeType.MINMAX:
+                lower = np.min(values_array, axis=0)
+                upper = np.max(values_array, axis=0)
+            elif self.config.graph_envelope == EnvelopeType.STD_DEV:
+                std = np.std(values_array, axis=0)
+                lower = mean_values - std
+                upper = mean_values + std
+            elif self.config.graph_envelope == EnvelopeType.STD_ERR:
+                std_err = np.std(values_array, axis=0) / np.sqrt(len(group_runs))
+                lower = mean_values - std_err
+                upper = mean_values + std_err
+
+            # Apply smoothing to envelope if requested
+            if (
+                self.config.envelope_smoothing
+                and lower is not None
+                and upper is not None
+            ):
+                lower = self._apply_smoothing(
+                    lower, self.config.smoothing, self.config.smoothing_amount
+                )
+                upper = self._apply_smoothing(
+                    upper, self.config.smoothing, self.config.smoothing_amount
+                )
+
+            if lower is not None and upper is not None:
+                envelope_data = (lower, upper)
+
+        return common_steps, mean_values, envelope_data
+
+    def _add_legend(self, ax, legend_elements: List) -> None:
+        """Add legend to the plot."""
+        if not legend_elements:
+            return
+
+        if self.config.legend_position == LegendPosition.INSIDE:
+            ax.legend(handles=legend_elements, loc="best")
+        elif self.config.legend_position == LegendPosition.TOP:
+            ax.legend(
+                handles=legend_elements,
+                bbox_to_anchor=(0.5, 1.02),
+                loc="lower center",
+                ncol=len(legend_elements),
+            )
+        elif self.config.legend_position == LegendPosition.BOTTOM:
+            ax.legend(
+                handles=legend_elements,
+                bbox_to_anchor=(0.5, -0.05),
+                loc="upper center",
+                ncol=len(legend_elements),
+            )
+        elif self.config.legend_position == LegendPosition.LEFT:
+            ax.legend(
+                handles=legend_elements, bbox_to_anchor=(-0.05, 0.5), loc="center right"
+            )
+        elif self.config.legend_position == LegendPosition.RIGHT:
+            ax.legend(
+                handles=legend_elements, bbox_to_anchor=(1.05, 0.5), loc="center left"
+            )
 
 
 def main():
-    """Main entry point"""
-    config = tyro.cli(GraphConfig)
+    """Main entry point."""
+    config = tyro.cli(Config, description=__doc__, use_underscores=False)
 
-    # Validate inputs
-    if not Path(config.csv_path).exists():
-        raise FileNotFoundError(f"CSV file not found: {config.csv_path}")
+    # Create default config files if they don't exist
+    create_default_configs()
 
-    if not (0 <= config.ema_smoothing <= 1):
-        raise ValueError("EMA smoothing must be between 0 and 1")
+    # Create visualizer and process data
+    visualizer = WandBVisualizer(config)
+    runs = visualizer.parse_csv()
 
-    if not (0 <= config.opacity <= 1):
-        raise ValueError("Opacity must be between 0 and 1")
+    if not runs:
+        print("No valid runs found in the CSV file.")
+        return
 
-    if config.group not in ["none", "default", "custom"]:
-        raise ValueError("Group mode must be 'none', 'default', or 'custom'")
+    print(f"Found {len(runs)} runs")
 
-    if config.group == "custom" and not config.group_config:
-        raise ValueError("Custom grouping requires --group-config to be specified")
+    # Apply smoothing
+    smoothed_runs = visualizer.smooth_data(runs)
 
-    if config.line_weight <= 0:
-        raise ValueError("Line weight must be positive")
+    # Create visualization
+    visualizer.create_visualization(smoothed_runs)
 
-    if config.output_format not in ["png", "svg"]:
-        raise ValueError("Output format must be 'png' or 'svg'")
 
-    grapher = WandBGrapher(config)
-    grapher.create_graph()
+def create_default_configs():
+    """Create default configuration files if they don't exist."""
+    # Create config directory
+    config_dir = Path("config")
+    config_dir.mkdir(exist_ok=True)
+
+    # Create output directory
+    out_dir = Path("out")
+    out_dir.mkdir(exist_ok=True)
+
+    # Create default groups.toml
+    if not (config_dir / "groups.toml").exists():
+        default_groups = {
+            "Baseline": {"members": ["baseline"], "dotted": False},
+            "RF Group 1": {"members": ["rf1", "rf2", "rf3"], "dotted": False},
+            "RF Group 2": {"members": ["rf4", "rf5", "rf6"], "dotted": True},
+        }
+        with open(config_dir / "groups.toml", "w") as f:
+            toml.dump(default_groups, f)
+
+    # Create default colors.toml
+    if not (config_dir / "colors.toml").exists():
+        default_colors = {
+            "colors": [
+                "#1f77b4",
+                "#ff7f0e",
+                "#2ca02c",
+                "#d62728",
+                "#9467bd",
+                "#8c564b",
+                "#e377c2",
+                "#7f7f7f",
+                "#bcbd22",
+                "#17becf",
+            ]
+        }
+        with open(config_dir / "colors.toml", "w") as f:
+            toml.dump(default_colors, f)
+
+    # Create default graph.toml
+    if not (config_dir / "graph.toml").exists():
+        default_graph = {
+            "x_axis_name": "Step",
+            "y_axis_name": "Episodic Original Reward",
+            "envelope_opacity": 0.3,
+            "font_color": "#000000",
+            "font_size": 12,
+            "font_weight": "normal",
+            "box_color": "#FFFFFF",
+            "line_thickness": 2.0,
+            "grid_color": "#CCCCCC",
+            "grid_thickness": 0.5,
+            "line_width": 2.0,
+        }
+        with open(config_dir / "graph.toml", "w") as f:
+            toml.dump(default_graph, f)
 
 
 if __name__ == "__main__":

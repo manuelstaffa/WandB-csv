@@ -87,7 +87,7 @@ class GraphSettings:
     line_width: float = 2.0
     original_line_thickness: float = 0.5
     legend_position: LegendPosition = LegendPosition.INSIDE
-    legend_box: bool = True
+    legend_box: bool = False
 
 
 @dataclass

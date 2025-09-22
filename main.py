@@ -68,7 +68,6 @@ class Config:
     envelope_smoothing: bool = True
     show_original_graph: bool = False
     original_graph_smoothing: bool = False
-    legend_position: LegendPosition = LegendPosition.INSIDE
 
 
 @dataclass
@@ -83,10 +82,12 @@ class GraphSettings:
     font_weight: str = "normal"
     box_color: str = "#FFFFFF"
     line_thickness: float = 2.0
-    original_line_thickness: float = 0.5
     grid_color: str = "#CCCCCC"
     grid_thickness: float = 0.5
     line_width: float = 2.0
+    original_line_thickness: float = 0.5
+    legend_position: LegendPosition = LegendPosition.INSIDE
+    legend_box: bool = True
 
 
 @dataclass
@@ -473,9 +474,7 @@ class WandBVisualizer:
                             color=color,
                             alpha=0.3,
                             linewidth=self.graph_settings.original_line_thickness,
-                        )
-
-            # Plot the main line
+                        )  # Plot the main line
             ax.plot(
                 steps,
                 mean_values,
@@ -584,29 +583,41 @@ class WandBVisualizer:
         if not legend_elements:
             return
 
-        if self.config.legend_position == LegendPosition.INSIDE:
-            ax.legend(handles=legend_elements, loc="best")
-        elif self.config.legend_position == LegendPosition.TOP:
+        if self.graph_settings.legend_position == LegendPosition.INSIDE:
+            ax.legend(
+                handles=legend_elements,
+                loc="best",
+                frameon=self.graph_settings.legend_box,
+            )
+        elif self.graph_settings.legend_position == LegendPosition.TOP:
             ax.legend(
                 handles=legend_elements,
                 bbox_to_anchor=(0.5, 1.02),
                 loc="lower center",
                 ncol=len(legend_elements),
+                frameon=self.graph_settings.legend_box,
             )
-        elif self.config.legend_position == LegendPosition.BOTTOM:
+        elif self.graph_settings.legend_position == LegendPosition.BOTTOM:
             ax.legend(
                 handles=legend_elements,
                 bbox_to_anchor=(0.5, -0.05),
                 loc="upper center",
                 ncol=len(legend_elements),
+                frameon=self.graph_settings.legend_box,
             )
-        elif self.config.legend_position == LegendPosition.LEFT:
+        elif self.graph_settings.legend_position == LegendPosition.LEFT:
             ax.legend(
-                handles=legend_elements, bbox_to_anchor=(-0.05, 0.5), loc="center right"
+                handles=legend_elements,
+                bbox_to_anchor=(-0.05, 0.5),
+                loc="center right",
+                frameon=self.graph_settings.legend_box,
             )
-        elif self.config.legend_position == LegendPosition.RIGHT:
+        elif self.graph_settings.legend_position == LegendPosition.RIGHT:
             ax.legend(
-                handles=legend_elements, bbox_to_anchor=(1.05, 0.5), loc="center left"
+                handles=legend_elements,
+                bbox_to_anchor=(1.05, 0.5),
+                loc="center left",
+                frameon=self.graph_settings.legend_box,
             )
 
 

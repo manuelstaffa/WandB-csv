@@ -10,5 +10,5 @@ colors = [
     "#e377c2",  # pink
     "#7f7f7f",  # gray
     "#bcbd22",  # olive
-    "#17becf"   # cyan
+    "#058694ff"   # cyan
 ]

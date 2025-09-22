@@ -5,11 +5,13 @@ A comprehensive tool to convert CSV files exported from wandb.ai to publication-
 ## Features
 
 - **Flexible Data Parsing**: Automatically parses WandB CSV files and extracts run information
+- **Customizable Pattern Matching**: Configurable pattern extraction for run names with `MATCH_START` and `MATCH_END` constants
 - **Smart Grouping**: Groups runs by name patterns (e.g., `rf14`, `baseline`) with optional custom grouping via TOML configuration
+- **Custom Group Colors**: Specify custom colors for individual groups in groups.toml
 - **Multiple Smoothing Options**: Support for various smoothing algorithms including EMA, moving average, min/max
 - **Customizable Envelopes**: Choose between min-max, standard deviation, or standard error envelopes
 - **Publication Ready**: Export to PDF, PNG, or processed CSV with customizable styling
-- **Configurable Visualization**: Full control over colors, fonts, legends, and layout via TOML configuration files
+- **Configurable Visualization**: Full control over colors, fonts, legends, and layout via dataclass settings
 
 ## Installation
 
@@ -36,10 +38,12 @@ python main.py --env-id kangaroo --csv-file in/kangaroo.csv --custom-groups conf
 ## Command Line Arguments
 
 ### Required Arguments
+
 - `--env-id`: Atari environment ID (e.g., `kangaroo`)
 - `--csv-file`: Path to the WandB CSV file
 
 ### Optional Arguments
+
 - `--type`: Output format - `PNG` (default), `PDF`, `SVG`, or `CSV`
 - `--title`: Graph title (default: empty)
 - `--dpi`: Output DPI for images (default: 300)
@@ -86,6 +90,7 @@ Define how runs should be grouped together:
 [Baseline]
 members = ["baseline"]
 dotted = false
+color = "#ff0000"  # Optional custom color
 
 ["RF Group 1-5"]
 members = ["rf1", "rf2", "rf3", "rf4", "rf5"]
@@ -94,10 +99,55 @@ dotted = false
 ["RF Group 6-10"] 
 members = ["rf6", "rf7", "rf8", "rf9", "rf10"]
 dotted = true  # Use dashed lines
+color = "#00aa00"  # Optional custom color
 ```
 
 - `members`: List of run name patterns to include in this group
 - `dotted`: Use dashed lines for this group (default: false)
+- `color`: Optional custom color in hex format (e.g., "#ff0000" for red). If not specified, uses default color palette
+
+## Customizable Pattern Matching
+
+The tool uses configurable constants in the `WandBVisualizer` class to extract group names from CSV column headers:
+
+```python
+MATCH_START = "{env_id}-"  # Pattern that marks the start of the group name extraction
+MATCH_END = "__"           # Character sequence that marks the end of the group name extraction
+```
+
+### How Pattern Matching Works
+
+For a CSV column header like:
+
+```
+"ALE/Kangaroo-v5__19-09-kangaroo-rf21__745__1758407694 - charts/Episodic_Original_Reward"
+```
+
+With `--env-id kangaroo`:
+
+1. `MATCH_START = "{env_id}-"` becomes `"kangaroo-"`
+2. The tool finds `"kangaroo-rf21__"` in the header
+3. Extracts `"rf21"` as the group name (between `"kangaroo-"` and `"__"`)
+
+### Customizing Pattern Matching
+
+To change how group names are extracted, modify the class constants:
+
+```python
+# Example: Extract from different positions
+MATCH_START = "/"          # Extract after forward slash  
+MATCH_END = "-"            # Extract before dash
+
+# Example: Extract from start of string
+MATCH_START = None         # Start from beginning of string
+MATCH_END = "__"           # Extract until double underscore
+
+# Example: Extract until end of string  
+MATCH_START = "{env_id}-"  # Start after env_id and dash
+MATCH_END = None           # Extract until end of string
+```
+
+**Note**: When `MATCH_START` or `MATCH_END` is `None`, the pattern will match from the start or until the end of the string respectively.
 
 ### config/colors.toml - Color Palette
 
@@ -112,33 +162,6 @@ colors = [
     "#9467bd",  # purple
     # ... add more as needed
 ]
-```
-
-### config/graph.toml - Visual Styling
-
-Control all visual aspects of the graph:
-
-```toml
-# Axis labels
-x_axis_name = "Step"
-y_axis_name = "Episodic Original Reward"
-
-# Envelope (confidence band) opacity
-envelope_opacity = 0.3
-
-# Font settings
-font_color = "#000000"
-font_size = 12
-font_weight = "normal"  # "normal", "bold", "light"
-
-# Background and styling
-box_color = "#FFFFFF"
-line_thickness = 2.0
-line_width = 2.0
-
-# Grid settings
-grid_color = "#CCCCCC"
-grid_thickness = 0.5
 ```
 
 ## Data Processing Pipeline
@@ -160,6 +183,7 @@ grid_thickness = 0.5
 - **None**: No smoothing applied
 
 The `smoothing-amount` parameter controls the strength:
+
 - `0.0`: No smoothing
 - `0.95`: Strong smoothing (default for EMA)
 - `1.0`: Maximum smoothing
@@ -181,36 +205,44 @@ The tool expects WandB CSV exports with the following structure:
 - First column: `Step`
 - Data columns: Run identifiers with metrics
 - MIN/MAX columns: Automatically filtered out
-- Run name extraction: Uses pattern matching to identify group names (e.g., `rf15`, `baseline`)
+- Run name extraction: Uses customizable pattern matching to identify group names (e.g., `rf15`, `baseline`)
+  - Default pattern extracts names between `{env_id}-` and `__`
+  - Pattern can be customized by modifying `MATCH_START` and `MATCH_END` class constants
 
 ## Examples
 
 ### Basic PNG Export (Default)
+
 ```bash
 python main.py --env-id kangaroo --csv-file data/kangaroo.csv --title "Kangaroo Training Performance"
 ```
 
 ### High-Resolution PDF with Custom Smoothing
+
 ```bash
 python main.py --env-id kangaroo --csv-file data/kangaroo.csv --type PDF --dpi 600 --smoothing average --smoothing-amount 0.7
 ```
 
 ### SVG Export for Vector Graphics
+
 ```bash
 python main.py --env-id kangaroo --csv-file data/kangaroo.csv --type SVG --title "Vector Graphics Export"
 ```
 
 ### Show Individual Runs with Envelope
+
 ```bash
 python main.py --env-id kangaroo --csv-file data/kangaroo.csv --show-original-lines --graph-envelope minmax
 ```
 
 ### Export Processed Data as CSV
+
 ```bash
 python main.py --env-id kangaroo --csv-file data/kangaroo.csv --type CSV
 ```
 
 ### Custom Grouping with External Legend
+
 ```bash
 python main.py --env-id kangaroo --csv-file data/kangaroo.csv --custom-groups config/experiment_groups.toml --legend-position top
 ```
@@ -225,18 +257,23 @@ All output files are saved to the `out/` directory with timestamps:
 ## Troubleshooting
 
 ### No runs found
+
 - Check that your CSV file contains data columns with the expected naming pattern
-- Verify that the run names contain the expected group identifiers
+- Verify that the run names contain the expected group identifiers between `{env_id}-` and `__` (default pattern)
+- If using a different naming convention, modify the `MATCH_START` and `MATCH_END` constants in the `WandBVisualizer` class
 
 ### Import errors
+
 - Ensure all dependencies are installed: `pip install -r requirements.txt`
 - For TOML import issues, try: `pip install toml`
 
 ### Empty graphs
+
 - Check that your custom groups TOML file correctly references the run names in your data
 - Use `--type csv` to export processed data and verify grouping is working correctly
 
 ### Configuration not applied
+
 - Ensure TOML files are in the `config/` directory
 - Check TOML syntax using an online validator
 

@@ -104,11 +104,20 @@ class RunData:
 class WandBVisualizer:
     """Main visualizer class for converting WandB CSV files to graphs."""
 
+    # Constants for customizable pattern matching
+    MATCH_START = (
+        "{env_id}-"  # Pattern that marks the start of the group name extraction
+    )
+    MATCH_END = (
+        "__"  # Character sequence that marks the end of the group name extraction
+    )
+
     def __init__(self, config: Config):
         self.config = config
         self.graph_settings = GraphSettings()
         self.colors = self._load_colors()
         self.custom_groups = self._load_custom_groups()
+        self.group_colors = {}
 
     def _load_colors(self) -> List[str]:
         """Load colors from colors.toml"""
@@ -191,8 +200,38 @@ class WandBVisualizer:
     def _extract_run_info(self, column_name: str) -> Optional[Tuple[str, str]]:
         """Extract run name and group from column header."""
         # Pattern to match: ALE/Kangaroo-v5__date-env_id-GROUP__number__timestamp - charts/...
-        # We want to extract the GROUP part
-        pattern = rf".*?{self.config.env_id}-([^_]+)__.*"
+        # We want to extract the GROUP part between MATCH_START and MATCH_END
+        # Build the pattern using the customizable constants
+
+        # Handle MATCH_START: substitute {env_id} placeholder and handle None
+        if self.MATCH_START is not None:
+            start_pattern = self.MATCH_START.format(env_id=self.config.env_id)
+            escaped_start = re.escape(start_pattern)
+            start_regex = f".*?{escaped_start}"
+        else:
+            # If MATCH_START is None, match from the beginning of string
+            start_regex = ""
+
+        # Handle MATCH_END: handle None case
+        if self.MATCH_END is not None:
+            escaped_end = re.escape(self.MATCH_END)
+            end_regex = f"{escaped_end}.*"
+            # Create character class for stopping the capture group
+            if len(self.MATCH_END) > 0:
+                stop_char = re.escape(self.MATCH_END[0])
+            else:
+                stop_char = "_"  # fallback
+        else:
+            # If MATCH_END is None, match until the end of string
+            end_regex = "$"
+            stop_char = ""  # capture everything
+
+        # Build the complete pattern
+        if stop_char:
+            pattern = f"{start_regex}([^{stop_char}]+){end_regex}"
+        else:
+            pattern = f"{start_regex}(.+){end_regex}"
+
         match = re.search(pattern, column_name)
 
         if match:
@@ -209,13 +248,20 @@ class WandBVisualizer:
         # Create a mapping of group names to new group names
         group_mapping = {}
         dotted_groups = set()
+        self.group_colors = {}  # Store custom colors for groups
 
         for group_name, group_config in self.custom_groups.items():
             if isinstance(group_config, dict):
                 members = group_config.get("members", [])
                 is_dotted = group_config.get("dotted", False)
+                custom_color = group_config.get("color")
+
                 if is_dotted:
                     dotted_groups.add(group_name)
+
+                # Store custom color if specified
+                if custom_color:
+                    self.group_colors[group_name] = custom_color
             else:
                 # Legacy format: just a list
                 members = group_config
@@ -425,8 +471,12 @@ class WandBVisualizer:
         color_idx = 0
 
         for group_name, group_runs in grouped_data.items():
-            color = self.colors[color_idx % len(self.colors)]
-            color_idx += 1
+            # Check if group has a custom color, otherwise use default palette
+            if group_name in self.group_colors:
+                color = self.group_colors[group_name]
+            else:
+                color = self.colors[color_idx % len(self.colors)]
+                color_idx += 1
 
             # Aggregate data for the group
             aggregated_data = self._aggregate_group_data(group_runs)
@@ -658,7 +708,7 @@ def create_default_configs():
     # Create default groups.toml
     if not (config_dir / "groups.toml").exists():
         default_groups = {
-            "Baseline": {"members": ["baseline"], "dotted": False},
+            "Baseline": {"members": ["baseline"], "dotted": False, "color": "#ff0000"},
             "RF Group 1": {"members": ["rf1", "rf2", "rf3"], "dotted": False},
             "RF Group 2": {"members": ["rf4", "rf5", "rf6"], "dotted": True},
         }

@@ -88,7 +88,8 @@ class GraphSettings:
     original_line_thickness: float = 0.5
     legend_position: LegendPosition = LegendPosition.INSIDE
     legend_box: bool = False
-    envelope_patterns: bool = False
+    envelope_patterns: bool = True
+    envelope_pattern_scale: float = 0.25
 
 
 @dataclass
@@ -513,7 +514,28 @@ class WandBVisualizer:
                 # Determine hatch pattern if patterns are enabled
                 hatch = None
                 if self.graph_settings.envelope_patterns:
-                    hatch = hatch_patterns[pattern_idx % len(hatch_patterns)]
+                    base_pattern = hatch_patterns[pattern_idx % len(hatch_patterns)]
+                    # Apply pattern scale by repeating the pattern
+                    if (
+                        base_pattern
+                        and self.graph_settings.envelope_pattern_scale != 1.0
+                    ):
+                        # Scale the pattern by repeating characters
+                        scale_factor = max(
+                            0.1, self.graph_settings.envelope_pattern_scale
+                        )
+                        if scale_factor < 1.0:
+                            # For scale < 1, use fewer pattern repetitions
+                            pattern_length = max(
+                                1, int(len(base_pattern) * scale_factor)
+                            )
+                            hatch = base_pattern[:pattern_length]
+                        else:
+                            # For scale > 1, repeat the pattern
+                            repetitions = int(scale_factor)
+                            hatch = base_pattern * repetitions
+                    else:
+                        hatch = base_pattern
 
                 ax.fill_between(
                     steps,

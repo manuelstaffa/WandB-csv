@@ -35,6 +35,13 @@ output/
 in/*.csv
 in/*.xlsx
 
+# Ignore all TOML files in /config
+/config/*.toml
+
+# But keep these two
+!/config/colors.toml
+!/config/groups.toml
+
 # Environment
 .env
 .venv

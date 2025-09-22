@@ -1,17 +1,10 @@
-# Example groupings for runs
-# Groups are defined as "Group Name" = {"members": ["rf1", "rf2"], "dotted": false}
-# Set dotted = true to use dashed lines for that group
-# Optionally specify color = "#RRGGBB" to use a custom color for that group
-
 [Baseline]
-members = ["baseline"]
+members = ["run_name"]
 dotted = true
-color = "#000000ff"
+color = "#ff0000"
 
-["Shaping"]
-members = ["rf11", "rf12"]
-dotted = false
+["RF Group 1"]
+members = ["run_name1", "run_name2", "run_name3"]
 
-["Shaping+Reasoning"]
-members = ["rf13", "rf14"]
-dotted = false
+["RF Group 2"]
+members = ["run_name4", "run_name5", "run_name6"]

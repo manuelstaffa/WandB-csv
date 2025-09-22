@@ -76,7 +76,7 @@ class GraphSettings:
 
     x_axis_name: str = "Step"
     y_axis_name: str = "Episodic Original Reward"
-    envelope_opacity: float = 0.3
+    envelope_opacity: float = 0.2
     font_color: str = "#000000"
     font_size: int = 12
     font_weight: str = "normal"
@@ -88,6 +88,7 @@ class GraphSettings:
     original_line_thickness: float = 0.5
     legend_position: LegendPosition = LegendPosition.INSIDE
     legend_box: bool = False
+    envelope_patterns: bool = False
 
 
 @dataclass
@@ -118,6 +119,15 @@ class WandBVisualizer:
         self.colors = self._load_colors()
         self.custom_groups = self._load_custom_groups()
         self.group_colors = {}
+
+    def _get_config_name(self) -> str:
+        """Get the configuration name for filename generation."""
+        if not self.config.custom_groups:
+            return "default"
+
+        # Extract filename from path and remove extension
+        config_path = Path(self.config.custom_groups)
+        return config_path.stem  # This gets the filename without extension
 
     def _load_colors(self) -> List[str]:
         """Load colors from colors.toml"""
@@ -402,7 +412,11 @@ class WandBVisualizer:
 
         # Create output filename with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_path = Path("out") / f"{self.config.env_id}_{timestamp}_processed.csv"
+        config_name = self._get_config_name()
+        output_path = (
+            Path("out")
+            / f"{self.config.env_id}_{config_name}_{timestamp}_processed.csv"
+        )
 
         # Combine all data into a single DataFrame
         all_data = []
@@ -469,6 +483,9 @@ class WandBVisualizer:
         # Plot each group
         legend_elements = []
         color_idx = 0
+        pattern_idx = 0
+        # Define hatch patterns for envelope differentiation
+        hatch_patterns = ["", "///", "\\\\\\", "|||", "---", "+++", "xxx", "..."]
 
         for group_name, group_runs in grouped_data.items():
             # Check if group has a custom color, otherwise use default palette
@@ -492,13 +509,23 @@ class WandBVisualizer:
             # Plot the envelope if requested
             if envelope_data is not None:
                 lower, upper = envelope_data
+
+                # Determine hatch pattern if patterns are enabled
+                hatch = None
+                if self.graph_settings.envelope_patterns:
+                    hatch = hatch_patterns[pattern_idx % len(hatch_patterns)]
+
                 ax.fill_between(
                     steps,
                     lower,
                     upper,
                     alpha=self.graph_settings.envelope_opacity,
                     color=color,
+                    hatch=hatch,
                 )
+
+            # Increment pattern index for next group
+            pattern_idx += 1
 
             # Plot original graphs if requested
             if self.config.show_original_graph:
@@ -544,9 +571,10 @@ class WandBVisualizer:
 
         # Save the plot
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        config_name = self._get_config_name()
         output_path = (
             Path("out")
-            / f"{self.config.env_id}_{timestamp}_graph.{self.config.type.value}"
+            / f"{self.config.env_id}_{config_name}_{timestamp}_graph.{self.config.type.value}"
         )
         plt.tight_layout()
         plt.savefig(output_path, dpi=self.config.dpi, bbox_inches="tight")

@@ -88,6 +88,8 @@ class GraphSettings:
     original_line_thickness: float = 0.5
     legend_position: LegendPosition = LegendPosition.INSIDE
     legend_box: bool = False
+    legend_pattern: bool = False
+    legend_pattern_fade: float = 0.8
     envelope_patterns: bool = True
     envelope_pattern_scale: float = 0.25
 
@@ -129,6 +131,23 @@ class WandBVisualizer:
         # Extract filename from path and remove extension
         config_path = Path(self.config.custom_groups)
         return config_path.stem  # This gets the filename without extension
+
+    def _adjust_color_brightness(self, color: str, factor: float = 0.7) -> str:
+        """Adjust the brightness of a hex color. Factor < 1 makes it darker, > 1 makes it lighter."""
+        import matplotlib.colors as mcolors
+
+        # Convert hex to RGB
+        rgb = mcolors.hex2color(color)
+
+        # Adjust brightness
+        adjusted_rgb = (
+            min(1.0, max(0.0, rgb[0] * factor)),
+            min(1.0, max(0.0, rgb[1] * factor)),
+            min(1.0, max(0.0, rgb[2] * factor)),
+        )
+
+        # Convert back to hex
+        return mcolors.rgb2hex(adjusted_rgb)
 
     def _load_colors(self) -> List[str]:
         """Load colors from colors.toml"""
@@ -584,8 +603,29 @@ class WandBVisualizer:
             )
 
             # Create legend element
+            legend_hatch = None
+            if (
+                self.graph_settings.legend_pattern
+                and self.graph_settings.envelope_patterns
+            ):
+                legend_hatch = hatch_patterns[pattern_idx % len(hatch_patterns)]
+
             legend_elements.append(
-                patches.Rectangle((0, 0), 1, 1, facecolor=color, label=group_name)
+                patches.Rectangle(
+                    (0, 0),
+                    1,
+                    1,
+                    facecolor=color,
+                    hatch=legend_hatch,
+                    edgecolor=(
+                        self._adjust_color_brightness(
+                            color, factor=self.graph_settings.legend_pattern_fade
+                        )
+                        if legend_hatch
+                        else None
+                    ),
+                    label=group_name,
+                )
             )
 
         # Add legend

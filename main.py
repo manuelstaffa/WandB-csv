@@ -74,7 +74,7 @@ class Config:
 class GraphSettings:
     """Graph styling settings from graph.toml"""
 
-    figsize: Tuple[int, int] = (9, 6)  # (12, 8)
+    figure_size: Tuple[int, int] = (9, 6)  # (12, 8)
     x_axis_name: str = "Step"
     y_axis_name: str = "Episodic Original Reward"
     font_color: str = "#000000"
@@ -469,7 +469,7 @@ class WandBVisualizer:
         # Set up the plot
         plt.style.use("default")
         fig, ax = plt.subplots(
-            figsize=(self.graph_settings.figsize), dpi=self.config.dpi
+            figure_size=(self.graph_settings.figure_size), dpi=self.config.dpi
         )
 
         # Apply graph settings

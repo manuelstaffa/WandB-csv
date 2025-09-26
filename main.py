@@ -74,6 +74,7 @@ class Config:
 class GraphSettings:
     """Graph styling settings from graph.toml"""
 
+    figure_size: Tuple[float, float] = (9, 6)
     x_axis_name: str = "Step"
     y_axis_name: str = "Episodic Original Reward"
     envelope_opacity: float = 0.2
@@ -468,7 +469,7 @@ class WandBVisualizer:
 
         # Set up the plot
         plt.style.use("default")
-        fig, ax = plt.subplots(figsize=(12, 8), dpi=self.config.dpi)
+        fig, ax = plt.subplots(figsize=self.graph_settings.figure_size, dpi=self.config.dpi)
 
         # Apply graph settings
         ax.set_xlabel(

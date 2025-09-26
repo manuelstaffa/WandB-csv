@@ -74,22 +74,22 @@ class Config:
 class GraphSettings:
     """Graph styling settings from graph.toml"""
 
+    figsize: Tuple[int, int] = (9, 6)  # (12, 8)
     x_axis_name: str = "Step"
     y_axis_name: str = "Episodic Original Reward"
-    envelope_opacity: float = 0.2
     font_color: str = "#000000"
     font_size: int = 12
     font_weight: str = "normal"
     box_color: str = "#FFFFFF"
-    line_thickness: float = 2.0
     grid_color: str = "#CCCCCC"
     grid_thickness: float = 0.5
-    line_width: float = 2.0
-    original_line_thickness: float = 0.5
+    graph_thickness: float = 2.0  # Base line width for main graphs
+    original_graph_thickness: float = 0.5
     legend_position: LegendPosition = LegendPosition.INSIDE
     legend_box: bool = False
     legend_pattern: bool = False
     legend_pattern_fade: float = 0.8
+    envelope_opacity: float = 0.2
     envelope_patterns: bool = True
     envelope_pattern_scale: float = 0.25
 
@@ -468,7 +468,9 @@ class WandBVisualizer:
 
         # Set up the plot
         plt.style.use("default")
-        fig, ax = plt.subplots(figsize=(12, 8), dpi=self.config.dpi)
+        fig, ax = plt.subplots(
+            figsize=(self.graph_settings.figsize), dpi=self.config.dpi
+        )
 
         # Apply graph settings
         ax.set_xlabel(
@@ -583,7 +585,7 @@ class WandBVisualizer:
                             smoothed_values,
                             color=color,
                             alpha=0.3,
-                            linewidth=self.graph_settings.original_line_thickness,
+                            linewidth=self.graph_settings.original_graph_thickness,
                         )
                     else:
                         ax.plot(
@@ -591,13 +593,13 @@ class WandBVisualizer:
                             run.values,
                             color=color,
                             alpha=0.3,
-                            linewidth=self.graph_settings.original_line_thickness,
+                            linewidth=self.graph_settings.original_graph_thickness,
                         )  # Plot the main line
             ax.plot(
                 steps,
                 mean_values,
                 color=color,
-                linewidth=self.graph_settings.line_width,
+                linewidth=self.graph_settings.graph_thickness,
                 linestyle=linestyle,
                 label=group_name,
             )

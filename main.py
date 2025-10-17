@@ -19,7 +19,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import tyro
-import toml
+import tomlkit
 
 
 class OutputType(Enum):
@@ -87,7 +87,7 @@ class GraphSettings:
     original_graph_thickness: float = 0.5
     legend_position: LegendPosition = LegendPosition.INSIDE
     legend_box: bool = False
-    legend_pattern: bool = False
+    legend_pattern: bool = True
     legend_pattern_fade: float = 0.8
     envelope_opacity: float = 0.2
     envelope_patterns: bool = True

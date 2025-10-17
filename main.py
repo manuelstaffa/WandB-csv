@@ -728,7 +728,7 @@ class WandBVisualizer:
         if self.graph_settings.legend_position == LegendPosition.INSIDE:
             ax.legend(
                 handles=legend_elements,
-                loc="best",
+                loc="upper left",
                 frameon=self.graph_settings.legend_box,
             )
         elif self.graph_settings.legend_position == LegendPosition.TOP:

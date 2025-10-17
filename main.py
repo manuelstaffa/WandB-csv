@@ -469,7 +469,7 @@ class WandBVisualizer:
         # Set up the plot
         plt.style.use("default")
         fig, ax = plt.subplots(
-            figure_size=(self.graph_settings.figure_size), dpi=self.config.dpi
+            figsize=self.graph_settings.figure_size, dpi=self.config.dpi
         )
 
         # Apply graph settings

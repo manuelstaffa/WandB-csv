@@ -89,7 +89,7 @@ class GraphSettings:
     original_line_thickness: float = 0.5
     legend_position: LegendPosition = LegendPosition.INSIDE
     legend_box: bool = False
-    legend_pattern: bool = False
+    legend_pattern: bool = True
     legend_pattern_fade: float = 0.8
     envelope_patterns: bool = True
     envelope_pattern_scale: float = 0.25

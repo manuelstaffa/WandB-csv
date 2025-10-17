@@ -19,7 +19,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import tyro
-import tomlkit
+import toml
 
 
 class OutputType(Enum):

@@ -68,28 +68,30 @@ class Config:
     envelope_smoothing: bool = True
     show_original_graph: bool = False
     original_graph_smoothing: bool = False
+    x_axis_field: str = "global_step"
 
 
 @dataclass
 class GraphSettings:
     """Graph styling settings from graph.toml"""
 
-    figure_size: Tuple[int, int] = (9, 6)  # (12, 8)
+    figure_size: Tuple[float, float] = (9, 6)
     x_axis_name: str = "Step"
     y_axis_name: str = "Episodic Original Reward"
+    envelope_opacity: float = 0.2
     font_color: str = "#000000"
     font_size: int = 12
     font_weight: str = "normal"
     box_color: str = "#FFFFFF"
+    line_thickness: float = 2.0
     grid_color: str = "#CCCCCC"
     grid_thickness: float = 0.5
-    graph_thickness: float = 2.0  # Base line width for main graphs
-    original_graph_thickness: float = 0.5
+    line_width: float = 2.0
+    original_line_thickness: float = 0.5
     legend_position: LegendPosition = LegendPosition.INSIDE
     legend_box: bool = False
     legend_pattern: bool = True
     legend_pattern_fade: float = 0.8
-    envelope_opacity: float = 0.2
     envelope_patterns: bool = True
     envelope_pattern_scale: float = 0.25
 
@@ -202,7 +204,7 @@ class WandBVisualizer:
 
         # Get column names and filter out MIN/MAX columns
         columns = [col for col in df.columns if not col.endswith(("__MIN", "__MAX"))]
-        data_columns = [col for col in columns if col != "Step"]
+        data_columns = [col for col in columns if col != Config.x_axis_field]
 
         for col in data_columns:
             # Extract run information from column name
@@ -212,7 +214,7 @@ class WandBVisualizer:
 
                 # Extract data (remove NaN values)
                 mask = ~df[col].isna()
-                steps = df.loc[mask, "Step"].values
+                steps = df.loc[mask, Config.x_axis_field].values
                 values = df.loc[mask, col].values
 
                 if len(steps) > 0:  # Only add runs with data
@@ -585,7 +587,7 @@ class WandBVisualizer:
                             smoothed_values,
                             color=color,
                             alpha=0.3,
-                            linewidth=self.graph_settings.original_graph_thickness,
+                            linewidth=self.graph_settings.original_line_thickness,
                         )
                     else:
                         ax.plot(
@@ -593,13 +595,13 @@ class WandBVisualizer:
                             run.values,
                             color=color,
                             alpha=0.3,
-                            linewidth=self.graph_settings.original_graph_thickness,
+                            linewidth=self.graph_settings.original_line_thickness,
                         )  # Plot the main line
             ax.plot(
                 steps,
                 mean_values,
                 color=color,
-                linewidth=self.graph_settings.graph_thickness,
+                linewidth=self.graph_settings.line_width,
                 linestyle=linestyle,
                 label=group_name,
             )
@@ -728,7 +730,7 @@ class WandBVisualizer:
         if self.graph_settings.legend_position == LegendPosition.INSIDE:
             ax.legend(
                 handles=legend_elements,
-                loc="upper left",
+                loc="best",
                 frameon=self.graph_settings.legend_box,
             )
         elif self.graph_settings.legend_position == LegendPosition.TOP:

@@ -69,6 +69,7 @@ class Config:
     show_original_graph: bool = False
     original_graph_smoothing: bool = False
     x_axis_field: str = "global_step"
+    y_axis_field: str = "Episodic_Original_Reward"
 
 
 @dataclass
@@ -204,7 +205,12 @@ class WandBVisualizer:
 
         # Get column names and filter out MIN/MAX columns
         columns = [col for col in df.columns if not col.endswith(("__MIN", "__MAX"))]
-        data_columns = [col for col in columns if col != Config.x_axis_field]
+        # Filter columns to only include those containing the y_axis_field and exclude x_axis_field
+        data_columns = [
+            col
+            for col in columns
+            if col != self.config.x_axis_field and self.config.y_axis_field in col
+        ]
 
         for col in data_columns:
             # Extract run information from column name
@@ -214,7 +220,7 @@ class WandBVisualizer:
 
                 # Extract data (remove NaN values)
                 mask = ~df[col].isna()
-                steps = df.loc[mask, Config.x_axis_field].values
+                steps = df.loc[mask, self.config.x_axis_field].values
                 values = df.loc[mask, col].values
 
                 if len(steps) > 0:  # Only add runs with data
@@ -329,7 +335,10 @@ class WandBVisualizer:
         smoothed_runs = []
         for run in runs:
             smoothed_values = self._apply_smoothing(
-                run.values, self.config.smoothing, self.config.smoothing_amount
+                run.values,
+                self.config.smoothing,
+                self.config.smoothing_amount,
+                run.steps,
             )
             smoothed_runs.append(
                 RunData(
@@ -344,14 +353,18 @@ class WandBVisualizer:
         return smoothed_runs
 
     def _apply_smoothing(
-        self, values: np.ndarray, smoothing_type: SmoothingType, amount: float
+        self,
+        values: np.ndarray,
+        smoothing_type: SmoothingType,
+        amount: float,
+        steps: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         """Apply the specified smoothing algorithm."""
         if smoothing_type == SmoothingType.NONE or amount == 0:
             return values
 
         if smoothing_type == SmoothingType.EMA:
-            return self._exponential_moving_average(values, amount)
+            return self._exponential_moving_average(values, amount, steps)
         elif smoothing_type == SmoothingType.AVERAGE:
             window_size = max(1, int(len(values) * (1 - amount)))
             return self._moving_average(values, window_size)
@@ -369,17 +382,52 @@ class WandBVisualizer:
         return values
 
     def _exponential_moving_average(
-        self, values: np.ndarray, alpha: float
+        self, values: np.ndarray, alpha: float, steps: Optional[np.ndarray] = None
     ) -> np.ndarray:
-        """Apply exponential moving average smoothing."""
+        """Apply exponential moving average smoothing with adaptive alpha based on step intervals."""
         if len(values) == 0:
             return values
 
-        smoothed = np.zeros_like(values)
+        smoothed = np.zeros_like(values, dtype=np.float64)
         smoothed[0] = values[0]
 
-        for i in range(1, len(values)):
-            smoothed[i] = alpha * smoothed[i - 1] + (1 - alpha) * values[i]
+        # If steps are provided, use adaptive alpha based on step intervals
+        if steps is not None and len(steps) == len(values):
+            # Calculate a reference interval (median or mean of intervals)
+            intervals = np.diff(steps)
+            if len(intervals) > 0:
+                # Use median interval as reference to avoid outliers
+                ref_interval = np.median(intervals)
+
+                for i in range(1, len(values)):
+                    # Calculate interval between current and previous step
+                    current_interval = steps[i] - steps[i - 1]
+
+                    # Adjust alpha based on the ratio of current interval to reference interval
+                    # If interval is larger, reduce the effect of previous value (lower alpha)
+                    # If interval is smaller, increase the effect of previous value (higher alpha)
+                    if ref_interval > 0:
+                        interval_ratio = current_interval / ref_interval
+                        # Clamp the ratio to reasonable bounds to avoid extreme values
+                        interval_ratio = np.clip(interval_ratio, 0.1, 10.0)
+
+                        # Adaptive alpha: larger intervals -> smaller alpha (less smoothing from previous)
+                        adaptive_alpha = alpha**interval_ratio
+                    else:
+                        adaptive_alpha = alpha
+
+                    smoothed[i] = (
+                        adaptive_alpha * smoothed[i - 1]
+                        + (1 - adaptive_alpha) * values[i]
+                    )
+            else:
+                # Fallback to standard EMA if no intervals can be calculated
+                for i in range(1, len(values)):
+                    smoothed[i] = alpha * smoothed[i - 1] + (1 - alpha) * values[i]
+        else:
+            # Standard EMA when no steps are provided
+            for i in range(1, len(values)):
+                smoothed[i] = alpha * smoothed[i - 1] + (1 - alpha) * values[i]
 
         return smoothed
 
@@ -530,35 +578,28 @@ class WandBVisualizer:
             # Determine line style
             linestyle = "--" if any(run.is_dotted for run in group_runs) else "-"
 
+            # Determine hatch pattern if patterns are enabled (before plotting envelope)
+            hatch = None
+            if self.graph_settings.envelope_patterns:
+                base_pattern = hatch_patterns[pattern_idx % len(hatch_patterns)]
+                # Apply pattern scale by repeating the pattern
+                if base_pattern and self.graph_settings.envelope_pattern_scale != 1.0:
+                    # Scale the pattern by repeating characters
+                    scale_factor = max(0.1, self.graph_settings.envelope_pattern_scale)
+                    if scale_factor < 1.0:
+                        # For scale < 1, use fewer pattern repetitions
+                        pattern_length = max(1, int(len(base_pattern) * scale_factor))
+                        hatch = base_pattern[:pattern_length]
+                    else:
+                        # For scale > 1, repeat the pattern
+                        repetitions = int(scale_factor)
+                        hatch = base_pattern * repetitions
+                else:
+                    hatch = base_pattern
+
             # Plot the envelope if requested
             if envelope_data is not None:
                 lower, upper = envelope_data
-
-                # Determine hatch pattern if patterns are enabled
-                hatch = None
-                if self.graph_settings.envelope_patterns:
-                    base_pattern = hatch_patterns[pattern_idx % len(hatch_patterns)]
-                    # Apply pattern scale by repeating the pattern
-                    if (
-                        base_pattern
-                        and self.graph_settings.envelope_pattern_scale != 1.0
-                    ):
-                        # Scale the pattern by repeating characters
-                        scale_factor = max(
-                            0.1, self.graph_settings.envelope_pattern_scale
-                        )
-                        if scale_factor < 1.0:
-                            # For scale < 1, use fewer pattern repetitions
-                            pattern_length = max(
-                                1, int(len(base_pattern) * scale_factor)
-                            )
-                            hatch = base_pattern[:pattern_length]
-                        else:
-                            # For scale > 1, repeat the pattern
-                            repetitions = int(scale_factor)
-                            hatch = base_pattern * repetitions
-                    else:
-                        hatch = base_pattern
 
                 ax.fill_between(
                     steps,
@@ -581,6 +622,7 @@ class WandBVisualizer:
                             run.values,
                             self.config.smoothing,
                             self.config.smoothing_amount,
+                            run.steps,
                         )
                         ax.plot(
                             run.steps,
@@ -612,7 +654,18 @@ class WandBVisualizer:
                 self.graph_settings.legend_pattern
                 and self.graph_settings.envelope_patterns
             ):
-                legend_hatch = hatch_patterns[pattern_idx % len(hatch_patterns)]
+                # Create optimal density hatch for legend visibility
+                if hatch and hatch.strip():  # Only if hatch is not empty
+                    # Make legend hatch with moderate density for visibility
+                    base_char = hatch[0] if hatch else ""
+                    if base_char in ["/", "\\", "|", "-", "+", "x", "."]:
+                        # Use moderate density (40% of previous 8 = ~3) for better visibility
+                        legend_hatch = base_char * 3
+                    else:
+                        # For already complex patterns, use original pattern
+                        legend_hatch = hatch
+                else:
+                    legend_hatch = hatch
 
             legend_elements.append(
                 patches.Rectangle(
@@ -683,7 +736,10 @@ class WandBVisualizer:
         # Apply smoothing to mean if requested
         if self.config.envelope_smoothing:
             mean_values = self._apply_smoothing(
-                mean_values, self.config.smoothing, self.config.smoothing_amount
+                mean_values,
+                self.config.smoothing,
+                self.config.smoothing_amount,
+                common_steps,
             )
 
         # Calculate envelope
@@ -711,10 +767,16 @@ class WandBVisualizer:
                 and upper is not None
             ):
                 lower = self._apply_smoothing(
-                    lower, self.config.smoothing, self.config.smoothing_amount
+                    lower,
+                    self.config.smoothing,
+                    self.config.smoothing_amount,
+                    common_steps,
                 )
                 upper = self._apply_smoothing(
-                    upper, self.config.smoothing, self.config.smoothing_amount
+                    upper,
+                    self.config.smoothing,
+                    self.config.smoothing_amount,
+                    common_steps,
                 )
 
             if lower is not None and upper is not None:

@@ -66,8 +66,8 @@ class Config:
     smoothing_amount: float = 0.9
     graph_envelope: EnvelopeType = EnvelopeType.STD_DEV
     envelope_smoothing: bool = True
-    show_original_graph: bool = False
-    original_graph_smoothing: bool = False
+    show_original_graph: bool = True
+    original_graph_smoothing: bool = True
     x_axis_field: str = "global_step"
     y_axis_field: str = "Episodic_Original_Reward"
 

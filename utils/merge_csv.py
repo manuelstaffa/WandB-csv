@@ -138,25 +138,13 @@ class CSVMerger:
         # Count experiment columns (exclude global_step)
         experiment_cols = [col for col in merged_df.columns if col != "global_step"]
 
-        # Count non-null values per original file (approximate)
+        # Count columns from each original file by reading them individually
         file_contributions = {}
-        for i, file_path in enumerate(file_paths):
-            if i == 0:
-                # For base file, count columns that don't have suffix
-                base_cols = [
-                    col
-                    for col in experiment_cols
-                    if not any(
-                        col.endswith(f"_file{j+1}") for j in range(1, len(file_paths))
-                    )
-                ]
-                file_contributions[file_path.name] = len(base_cols)
-            else:
-                # For other files, count columns with their suffix
-                suffix_cols = [
-                    col for col in experiment_cols if col.endswith(f"_file{i+1}")
-                ]
-                file_contributions[file_path.name] = len(suffix_cols)
+        for file_path in file_paths:
+            # Load original file to count its columns
+            orig_df = pd.read_csv(file_path)
+            # Subtract 1 for global_step column
+            file_contributions[file_path.name] = len(orig_df.columns) - 1
 
         summary = {
             "total_rows": len(merged_df),

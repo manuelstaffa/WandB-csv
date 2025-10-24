@@ -509,12 +509,25 @@ class WandBVisualizer:
 
     def _create_plot(self, runs: List[RunData]) -> None:
         """Create matplotlib plot."""
-        # Group runs by group name
+        # Group runs by group name, maintaining order from TOML config
         grouped_data = {}
         for run in runs:
             if run.group not in grouped_data:
                 grouped_data[run.group] = []
             grouped_data[run.group].append(run)
+
+        # Reorder grouped_data to match the order in custom_groups if available
+        if self.custom_groups:
+            ordered_grouped_data = {}
+            # First, add groups in the order they appear in the TOML config
+            for group_name in self.custom_groups.keys():
+                if group_name in grouped_data:
+                    ordered_grouped_data[group_name] = grouped_data[group_name]
+            # Then add any remaining groups that weren't in the config
+            for group_name, group_runs in grouped_data.items():
+                if group_name not in ordered_grouped_data:
+                    ordered_grouped_data[group_name] = group_runs
+            grouped_data = ordered_grouped_data
 
         # Set up the plot
         plt.style.use("default")
